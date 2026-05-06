@@ -1,0 +1,25 @@
+<?php
+
+namespace App\Http\Requests\Api;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class VerifyEmailTwoFactorRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [
+            'pending_token' => ['required', 'string', 'size:64'],
+            'code' => ['required', 'string', 'regex:/^[0-9]{6}$/'],
+            'device_name' => ['sometimes', 'string', 'max:255'],
+        ];
+    }
+}

@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\Api\CurrentUserController;
 use App\Http\Controllers\Api\LoginController;
+use App\Http\Controllers\Api\ResendEmailTwoFactorController;
 use App\Http\Controllers\Api\ToolController;
 use App\Http\Controllers\Api\ToolMetadataController;
+use App\Http\Controllers\Api\VerifyEmailTwoFactorController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/status', function () {
@@ -14,6 +16,8 @@ Route::get('/status', function () {
 });
 
 Route::post('/login', LoginController::class)->middleware('throttle:10,1');
+Route::post('/login/verify-2fa', VerifyEmailTwoFactorController::class)->middleware('throttle:20,1');
+Route::post('/login/resend-2fa', ResendEmailTwoFactorController::class)->middleware('throttle:12,1');
 
 Route::get('/user', CurrentUserController::class)->middleware('auth:sanctum');
 

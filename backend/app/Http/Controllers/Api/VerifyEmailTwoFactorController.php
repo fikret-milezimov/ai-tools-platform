@@ -3,25 +3,25 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\LoginRequest;
+use App\Http\Requests\Api\VerifyEmailTwoFactorRequest;
 use App\Services\EmailTwoFactorChallengeService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 
-class LoginController extends Controller
+class VerifyEmailTwoFactorController extends Controller
 {
     public function __invoke(
-        LoginRequest $request,
+        VerifyEmailTwoFactorRequest $request,
         EmailTwoFactorChallengeService $twoFactor,
     ): JsonResponse {
-        $user = $request->authenticateUser();
+        $user = $twoFactor->verify(
+            $request->validated('pending_token'),
+            $request->validated('code'),
+        );
 
-        if ($user->two_factor_email_enabled) {
-            $pendingToken = $twoFactor->createChallenge($user);
-
-            return response()->json([
-                'requires_2fa' => true,
-                'pending_token' => $pendingToken,
-                'message' => 'Check your email for a verification code.',
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'code' => ['Invalid or expired code.'],
             ]);
         }
 

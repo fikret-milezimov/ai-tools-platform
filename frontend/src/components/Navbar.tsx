@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   clearStoredAuth,
   getStoredUser,
@@ -31,9 +31,6 @@ function MenuIcon({ open }: { open: boolean }) {
 
 function matchesPath(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
-  if (href === "/tools/new") {
-    return pathname === "/tools/new";
-  }
   if (href === "/tools") {
     return pathname === "/tools" || pathname.startsWith("/tools/");
   }
@@ -46,6 +43,18 @@ export function Navbar() {
   const mobileNavId = useId();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
+
+  function closeAccountMenu() {
+    const el = accountMenuRef.current;
+    if (el) el.open = false;
+  }
+
+  useEffect(() => {
+    const el = accountMenuRef.current;
+    if (el) el.open = false;
+  }, [pathname]);
+
   useEffect(() => {
     setUser(getStoredUser());
   }, [pathname]);
@@ -61,20 +70,21 @@ export function Navbar() {
   }, []);
 
   function logout() {
+    closeAccountMenu();
     clearStoredAuth();
     setUser(null);
     setMenuOpen(false);
     router.push("/login");
   }
 
-  const navLinks = user ? navItemsForRole(user.role) : [];
+  const navLinks = user ? navItemsForRole() : [];
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/90 bg-white/95 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-white/90">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-14 max-w-7xl w-full items-center justify-between gap-3 px-4 sm:h-16 sm:px-6 sm:gap-4 lg:px-8">
         <Link
           href={user ? "/dashboard" : "/login"}
-          className="text-lg font-semibold tracking-tight text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+          className="shrink-0 text-lg font-semibold tracking-tight text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
         >
           AI Tools Platform
         </Link>
@@ -82,7 +92,7 @@ export function Navbar() {
         {user ? (
           <>
             <nav
-              className="hidden items-center gap-1 md:flex"
+              className="mx-auto hidden min-w-0 flex-1 justify-center md:flex"
               aria-label="Main navigation"
             >
               {navLinks.map((item) => {
@@ -104,15 +114,15 @@ export function Navbar() {
               })}
             </nav>
 
-            <div className="hidden items-center gap-3 md:flex">
-              <details className="group relative">
-                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-                  <span className="max-w-[10rem] truncate">{user.name}</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal capitalize text-slate-600">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <details ref={accountMenuRef} className="group relative">
+                <summary className="flex max-w-[min(12rem,40vw)] cursor-pointer list-none items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 sm:max-w-none sm:gap-2 sm:px-3 [&::-webkit-details-marker]:hidden">
+                  <span className="truncate">{user.name}</span>
+                  <span className="hidden shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal capitalize text-slate-600 sm:inline">
                     {user.role}
                   </span>
                   <svg
-                    className="h-4 w-4 text-slate-500 group-open:rotate-180"
+                    className="h-4 w-4 shrink-0 text-slate-500 group-open:rotate-180"
                     viewBox="0 0 20 20"
                     fill="currentColor"
                     aria-hidden
@@ -132,6 +142,7 @@ export function Navbar() {
                     href="/profile"
                     className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
                     role="menuitem"
+                    onClick={closeAccountMenu}
                   >
                     Profile
                   </Link>
@@ -145,23 +156,23 @@ export function Navbar() {
                   </button>
                 </div>
               </details>
-            </div>
 
-            <button
-              type="button"
-              className="-mr-2 inline-flex items-center justify-center rounded-lg p-2 text-slate-700 hover:bg-slate-100 md:hidden"
-              aria-expanded={menuOpen}
-              aria-controls={mobileNavId}
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              <span className="sr-only">{menuOpen ? "Close menu" : "Open menu"}</span>
-              <MenuIcon open={menuOpen} />
-            </button>
+              <button
+                type="button"
+                className="-mr-2 inline-flex items-center justify-center rounded-lg p-2 text-slate-700 hover:bg-slate-100 md:hidden"
+                aria-expanded={menuOpen}
+                aria-controls={mobileNavId}
+                onClick={() => setMenuOpen((o) => !o)}
+              >
+                <span className="sr-only">{menuOpen ? "Close menu" : "Open menu"}</span>
+                <MenuIcon open={menuOpen} />
+              </button>
+            </div>
           </>
         ) : (
           <Link
             href="/login"
-            className={`rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${
+            className={`ml-auto rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${
               pathname === "/login"
                 ? "bg-sky-50 text-sky-800"
                 : "text-slate-700 hover:bg-slate-50"
@@ -194,13 +205,6 @@ export function Navbar() {
                 </Link>
               );
             })}
-            <button
-              type="button"
-              className="rounded-lg px-3 py-3 text-left text-base font-medium text-red-700"
-              onClick={logout}
-            >
-              Log out
-            </button>
           </nav>
         </div>
       ) : null}
