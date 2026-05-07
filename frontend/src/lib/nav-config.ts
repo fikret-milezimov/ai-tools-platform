@@ -9,9 +9,14 @@ export type NavItem = {
 
 const dashboard: NavItem = { href: "/dashboard", label: "Dashboard" };
 const tools: NavItem = { href: "/tools", label: "Tools" };
+const adminTools: NavItem = { href: "/admin/tools", label: "Admin" };
 
-export function navItemsForRole(): NavItem[] {
-  return [dashboard, tools];
+export function navItemsForRole(role: string | null): NavItem[] {
+  const items: NavItem[] = [dashboard, tools];
+  if (role === "owner") {
+    items.push(adminTools);
+  }
+  return items;
 }
 
 /** Shown on /tools only (not in navbar). */

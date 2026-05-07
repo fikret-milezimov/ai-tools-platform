@@ -31,6 +31,9 @@ function MenuIcon({ open }: { open: boolean }) {
 
 function matchesPath(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
+  if (href === "/admin/tools") {
+    return pathname === "/admin/tools" || pathname.startsWith("/admin/");
+  }
   if (href === "/tools") {
     return pathname === "/tools" || pathname.startsWith("/tools/");
   }
@@ -77,7 +80,7 @@ export function Navbar() {
     router.push("/login");
   }
 
-  const navLinks = user ? navItemsForRole() : [];
+  const navLinks = user ? navItemsForRole(user.role) : [];
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/90 bg-white/95 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-white/90">

@@ -106,6 +106,12 @@ function IconFlag() {
 function roleActionCards(role: string) {
   const owner = (
     <>
+      <ActionCard
+        href="/admin/tools"
+        title="Admin panel"
+        subtitle="Review pending tools, approve or reject submissions."
+        icon={<IconGrid />}
+      />
       <ComingSoonCard
         title="Manage users"
         subtitle="Organization settings — coming soon."
@@ -114,7 +120,7 @@ function roleActionCards(role: string) {
       <ActionCard
         href="/tools"
         title="View all tools"
-        subtitle="Browse the full catalog and filters."
+        subtitle="Browse the public catalog and filters."
         icon={<IconEye />}
       />
       <ActionCard

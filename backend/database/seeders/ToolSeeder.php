@@ -28,6 +28,7 @@ class ToolSeeder extends Seeder
                 'real_examples' => "Example: \"Summarize this article in three bullet points.\"",
                 'image_url' => null,
                 'created_by' => $userId,
+                'approval_status' => 'approved',
             ]
         );
 
@@ -51,6 +52,7 @@ class ToolSeeder extends Seeder
                 'real_examples' => null,
                 'image_url' => null,
                 'created_by' => $userId,
+                'approval_status' => 'approved',
             ]
         );
 
@@ -74,6 +76,7 @@ class ToolSeeder extends Seeder
                 'real_examples' => 'await page.goto("https://example.com"); await expect(page).toHaveTitle(/Example/);',
                 'image_url' => null,
                 'created_by' => $userId,
+                'approval_status' => 'approved',
             ]
         );
 

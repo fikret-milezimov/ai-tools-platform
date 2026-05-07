@@ -51,6 +51,7 @@ class ToolResource extends JsonResource
                     'name' => $r->name,
                 ])->values()
             ),
+            'approval_status' => $this->approval_status,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

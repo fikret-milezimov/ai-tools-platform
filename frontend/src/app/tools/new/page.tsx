@@ -164,7 +164,10 @@ export default function NewToolPage() {
         return;
       }
 
-      flashToast("Tool created successfully.", "success");
+      flashToast(
+        "Tool submitted. It will appear in the catalog after an admin approves it.",
+        "success",
+      );
       router.push("/tools");
     } catch {
       setFormError("Network error.");

@@ -9,6 +9,7 @@ use App\Http\Resources\ToolResource;
 use App\Models\Tool;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -18,6 +19,7 @@ class ToolController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Tool::query()
+            ->where('approval_status', 'approved')
             ->with(['creator:id,name,email', 'categories', 'tags', 'roles'])
             ->latest();
 
@@ -70,6 +72,7 @@ class ToolController extends Controller
         }
 
         $data['created_by'] = $request->user()->id;
+        $data['approval_status'] = 'pending';
 
         $tool = Tool::query()->create($data);
 
@@ -84,8 +87,18 @@ class ToolController extends Controller
             ->setStatusCode(Response::HTTP_CREATED);
     }
 
-    public function show(Tool $tool): ToolResource
+    public function show(Request $request, Tool $tool): ToolResource
     {
+        if ($tool->approval_status !== 'approved') {
+            $user = $request->user('sanctum');
+            $allowed = $user !== null && (
+                $user->role === 'owner' || (int) $user->id === (int) $tool->created_by
+            );
+            if (! $allowed) {
+                throw new NotFoundHttpException;
+            }
+        }
+
         $tool->load(['creator:id,name,email', 'categories', 'tags', 'roles']);
 
         return new ToolResource($tool);
@@ -105,6 +118,13 @@ class ToolController extends Controller
         if ($request->hasFile('screenshot')) {
             $path = $request->file('screenshot')->store('tool-images', 'public');
             $data['image_url'] = Storage::disk('public')->url($path);
+        }
+
+        if (
+            $request->user()->role !== 'owner'
+            && $tool->approval_status === 'rejected'
+        ) {
+            $data['approval_status'] = 'pending';
         }
 
         $tool->update($data);

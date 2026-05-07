@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminToolController;
 use App\Http\Controllers\Api\CurrentUserController;
 use App\Http\Controllers\Api\LoginController;
 use App\Http\Controllers\Api\ResendEmailTwoFactorController;
@@ -22,6 +23,12 @@ Route::post('/login/verify-2fa', VerifyEmailTwoFactorController::class)->middlew
 Route::post('/login/resend-2fa', ResendEmailTwoFactorController::class)->middleware('throttle:12,1');
 
 Route::get('/user', CurrentUserController::class)->middleware('auth:sanctum');
+
+Route::middleware(['auth:sanctum', 'owner'])->prefix('admin')->group(function () {
+    Route::get('/tools', [AdminToolController::class, 'index']);
+    Route::post('/tools/{tool}/approve', [AdminToolController::class, 'approve']);
+    Route::post('/tools/{tool}/reject', [AdminToolController::class, 'reject']);
+});
 
 Route::get('/tool-metadata', ToolMetadataController::class);
 

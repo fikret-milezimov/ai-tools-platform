@@ -17,6 +17,7 @@ class Tool extends Model
         'real_examples',
         'image_url',
         'created_by',
+        'approval_status',
     ];
 
     public function creator(): BelongsTo
