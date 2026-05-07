@@ -25,6 +25,8 @@ class User extends Authenticatable
         'password',
         'role',
         'two_factor_email_enabled',
+        'two_factor_telegram_chat_id',
+        'two_factor_totp_secret',
     ];
 
     /**
@@ -35,6 +37,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_totp_secret',
     ];
 
     /**
@@ -48,7 +51,49 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_email_enabled' => 'boolean',
+            'two_factor_totp_secret' => 'encrypted',
         ];
+    }
+
+    public function canUseTwoFactorMethod(string $method): bool
+    {
+        return match ($method) {
+            'email' => (bool) $this->two_factor_email_enabled,
+            'telegram' => $this->two_factor_telegram_chat_id !== null
+                && $this->two_factor_telegram_chat_id !== ''
+                && filled(config('services.telegram.bot_token')),
+            'totp' => filled($this->two_factor_totp_secret),
+            default => false,
+        };
+    }
+
+    /**
+     * @return list<array{id: string, label: string}>
+     */
+    public function availableTwoFactorMethods(): array
+    {
+        $out = [];
+        foreach (['email', 'telegram', 'totp'] as $id) {
+            if (! $this->canUseTwoFactorMethod($id)) {
+                continue;
+            }
+            $out[] = [
+                'id' => $id,
+                'label' => match ($id) {
+                    'email' => 'Email',
+                    'telegram' => 'Telegram',
+                    'totp' => 'Authenticator app',
+                    default => $id,
+                },
+            ];
+        }
+
+        return $out;
+    }
+
+    public function requiresTwoFactor(): bool
+    {
+        return $this->availableTwoFactorMethods() !== [];
     }
 
     public function tools(): HasMany

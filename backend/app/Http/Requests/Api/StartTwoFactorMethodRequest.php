@@ -4,7 +4,7 @@ namespace App\Http\Requests\Api;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class VerifyEmailTwoFactorRequest extends FormRequest
+class StartTwoFactorMethodRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -19,8 +19,6 @@ class VerifyEmailTwoFactorRequest extends FormRequest
         return [
             'pending_token' => ['required', 'string', 'size:64'],
             'method' => ['required', 'string', 'in:email,telegram,totp'],
-            'code' => ['required', 'string', 'regex:/^[0-9]{6}$/'],
-            'device_name' => ['sometimes', 'string', 'max:255'],
         ];
     }
 }

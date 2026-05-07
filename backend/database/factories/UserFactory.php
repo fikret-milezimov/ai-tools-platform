@@ -30,6 +30,8 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'role' => 'user',
             'two_factor_email_enabled' => false,
+            'two_factor_telegram_chat_id' => null,
+            'two_factor_totp_secret' => null,
             'remember_token' => Str::random(10),
         ];
     }

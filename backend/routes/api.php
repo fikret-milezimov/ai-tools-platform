@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\CurrentUserController;
 use App\Http\Controllers\Api\LoginController;
 use App\Http\Controllers\Api\ResendEmailTwoFactorController;
+use App\Http\Controllers\Api\StartTwoFactorMethodController;
 use App\Http\Controllers\Api\ToolController;
 use App\Http\Controllers\Api\ToolMetadataController;
 use App\Http\Controllers\Api\VerifyEmailTwoFactorController;
@@ -16,6 +17,7 @@ Route::get('/status', function () {
 });
 
 Route::post('/login', LoginController::class)->middleware('throttle:10,1');
+Route::post('/login/2fa/start', StartTwoFactorMethodController::class)->middleware('throttle:30,1');
 Route::post('/login/verify-2fa', VerifyEmailTwoFactorController::class)->middleware('throttle:20,1');
 Route::post('/login/resend-2fa', ResendEmailTwoFactorController::class)->middleware('throttle:12,1');
 

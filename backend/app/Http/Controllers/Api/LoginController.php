@@ -4,24 +4,25 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
-use App\Services\EmailTwoFactorChallengeService;
+use App\Services\TwoFactorLoginService;
 use Illuminate\Http\JsonResponse;
 
 class LoginController extends Controller
 {
     public function __invoke(
         LoginRequest $request,
-        EmailTwoFactorChallengeService $twoFactor,
+        TwoFactorLoginService $twoFactor,
     ): JsonResponse {
         $user = $request->authenticateUser();
 
-        if ($user->two_factor_email_enabled) {
-            $pendingToken = $twoFactor->createChallenge($user);
+        if ($user->requiresTwoFactor()) {
+            $pending = $twoFactor->createPendingLogin($user);
 
             return response()->json([
                 'requires_2fa' => true,
-                'pending_token' => $pendingToken,
-                'message' => 'Check your email for a verification code.',
+                'pending_token' => $pending['pending_token'],
+                'methods' => $pending['methods'],
+                'message' => 'Choose how to verify it’s you.',
             ]);
         }
 

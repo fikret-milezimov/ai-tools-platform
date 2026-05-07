@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\VerifyEmailTwoFactorRequest;
-use App\Services\EmailTwoFactorChallengeService;
+use App\Services\TwoFactorLoginService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 
@@ -12,10 +12,11 @@ class VerifyEmailTwoFactorController extends Controller
 {
     public function __invoke(
         VerifyEmailTwoFactorRequest $request,
-        EmailTwoFactorChallengeService $twoFactor,
+        TwoFactorLoginService $twoFactor,
     ): JsonResponse {
         $user = $twoFactor->verify(
             $request->validated('pending_token'),
+            $request->validated('method'),
             $request->validated('code'),
         );
 

@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\ResendEmailTwoFactorRequest;
-use App\Services\EmailTwoFactorChallengeService;
+use App\Services\TwoFactorLoginService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
@@ -13,7 +13,7 @@ class ResendEmailTwoFactorController extends Controller
 {
     public function __invoke(
         ResendEmailTwoFactorRequest $request,
-        EmailTwoFactorChallengeService $twoFactor,
+        TwoFactorLoginService $twoFactor,
     ): JsonResponse {
         $token = $request->validated('pending_token');
         $throttleKey = '2fa-resend:'.hash('sha256', $token).'|'.$request->ip();
@@ -32,12 +32,12 @@ class ResendEmailTwoFactorController extends Controller
 
         if (! $twoFactor->resend($token)) {
             throw ValidationException::withMessages([
-                'pending_token' => [__('This sign-in session has expired. Please sign in again.')],
+                'pending_token' => ['This sign-in session has expired, or resend is not available for this method. Please sign in again.'],
             ]);
         }
 
         return response()->json([
-            'message' => 'A new code has been sent to your email.',
+            'message' => 'A new code has been sent.',
         ]);
     }
 }
