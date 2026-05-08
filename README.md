@@ -329,5 +329,10 @@ Then rerun migrations:
 ```bash
 docker compose exec php_fpm php artisan migrate
 ```
+# 🤖 AI-assisted Development
 
+This project was developed with the assistance of AI tools such as Cursor AI, Claude Code, and ChatGPT.
+
+The AI workflow documentation and starter prompts can be found in:
+- [AI_AGENTS.md](./AI_AGENTS.md)
 
