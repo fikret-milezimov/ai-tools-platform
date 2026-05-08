@@ -111,14 +111,8 @@ function roleActionCards(role: string) {
       <ActionCard
         href="/admin/tools"
         title="Admin panel"
-        subtitle="Review pending tools, approve or reject submissions."
+        subtitle="Review pending tools, approve or reject submissions, and manage user accounts."
         icon={<IconGrid />}
-      />
-      <ActionCard
-        href="/admin/tools"
-        title="Manage users"
-        subtitle="Create and review user accounts."
-        icon={<IconUsers />}
       />
       <ActionCard
         href="/tools"

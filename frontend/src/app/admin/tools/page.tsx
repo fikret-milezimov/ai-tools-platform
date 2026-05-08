@@ -47,6 +47,33 @@ function prettyAction(action: string): string {
   return action.replaceAll(".", " ");
 }
 
+function formatLogTarget(row: AuditLogRow): string {
+  if (row.tool) {
+    return `${row.tool.name} (#${row.tool.id})`;
+  }
+
+  const meta = row.meta ?? {};
+  const targetEmail = typeof meta.target_user_email === "string" ? meta.target_user_email : null;
+  const targetUserId =
+    typeof meta.target_user_id === "number"
+      ? meta.target_user_id
+      : typeof meta.target_user_id === "string" && meta.target_user_id.trim() !== ""
+        ? Number(meta.target_user_id)
+        : null;
+
+  if (targetEmail && targetUserId && Number.isFinite(targetUserId)) {
+    return `${targetEmail} (#${targetUserId})`;
+  }
+  if (targetEmail) {
+    return targetEmail;
+  }
+  if (targetUserId && Number.isFinite(targetUserId)) {
+    return `User #${targetUserId}`;
+  }
+
+  return "—";
+}
+
 export default function AdminToolsPage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -66,7 +93,7 @@ export default function AdminToolsPage() {
   const [listError, setListError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
   const [users, setUsers] = useState<
-    { id: number; name: string; email: string; role: string; created_at?: string | null }[]
+    { id: number; name: string; email: string; role: string; is_active: boolean; created_at?: string | null }[]
   >([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -83,6 +110,10 @@ export default function AdminToolsPage() {
   const [newUserRole, setNewUserRole] = useState("backend");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserSubmitting, setNewUserSubmitting] = useState(false);
+  const [filterUserRole, setFilterUserRole] = useState("");
+  const [filterUserSearch, setFilterUserSearch] = useState("");
+  const [rowActionId, setRowActionId] = useState<number | null>(null);
+  const [roleDraftByUserId, setRoleDraftByUserId] = useState<Record<number, string>>({});
 
   type ToolsResponse = {
     tools?: Tool[];
@@ -96,8 +127,9 @@ export default function AdminToolsPage() {
     filters?: { actions?: string[] };
   };
   type UsersResponse = {
-    users?: { id: number; name: string; email: string; role: string; created_at?: string | null }[];
+    users?: { id: number; name: string; email: string; role: string; is_active: boolean; created_at?: string | null }[];
     pagination?: PaginationMeta;
+    user?: { id: number; role?: string; is_active?: boolean };
     message?: string;
     errors?: Record<string, string[]>;
   };
@@ -131,7 +163,9 @@ export default function AdminToolsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelOpen = isLg || filtersOpen;
   const returnTo = pathname;
-  const currentUserRole = getStoredUser()?.role ?? null;
+  const currentUser = getStoredUser();
+  const currentUserRole = currentUser?.role ?? null;
+  const currentUserId = currentUser?.id ?? null;
 
   useEffect(() => {
     const u = getStoredUser();
@@ -292,6 +326,9 @@ export default function AdminToolsPage() {
       const params = new URLSearchParams();
       params.set("page", String(page));
       params.set("per_page", "10");
+      if (filterUserRole) params.set("role", filterUserRole);
+      const userQuery = filterUserSearch.trim();
+      if (userQuery) params.set("search", userQuery);
       const res = await fetch(`${API_BASE}/api/admin/users?${params.toString()}`, {
         headers: authJsonHeaders(),
       });
@@ -302,6 +339,11 @@ export default function AdminToolsPage() {
         return;
       }
       setUsers(Array.isArray(raw?.users) ? raw.users : []);
+      const drafts: Record<number, string> = {};
+      for (const user of Array.isArray(raw?.users) ? raw.users : []) {
+        drafts[user.id] = user.role;
+      }
+      setRoleDraftByUserId(drafts);
       if (raw?.pagination) {
         setUsersPagination(raw.pagination);
       }
@@ -311,18 +353,13 @@ export default function AdminToolsPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [currentUserRole]);
+  }, [currentUserRole, filterUserRole, filterUserSearch]);
 
   useEffect(() => {
     if (currentUserRole === "owner") {
       void fetchUsers(1);
     }
   }, [currentUserRole, fetchUsers]);
-
-  async function handleFilters(e: FormEvent) {
-    e.preventDefault();
-    await fetchTools(1);
-  }
 
   async function submitUser(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -366,6 +403,57 @@ export default function AdminToolsPage() {
       showToast("Network error while adding user.", "error");
     } finally {
       setNewUserSubmitting(false);
+    }
+  }
+
+  async function saveUserRole(userId: number) {
+    const draftRole = roleDraftByUserId[userId];
+    const current = users.find((u) => u.id === userId);
+    if (!current || !draftRole || draftRole === current.role) {
+      return;
+    }
+    setRowActionId(userId);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/role`, {
+        method: "PUT",
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ role: draftRole }),
+      });
+      const raw = (await res.json().catch(() => null)) as UsersResponse | null;
+      if (!res.ok) {
+        showToast(raw?.message || `Could not update role (${res.status}).`, "error");
+        return;
+      }
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: draftRole } : u)));
+      showToast("User role updated.", "success");
+    } catch {
+      showToast("Network error while updating role.", "error");
+    } finally {
+      setRowActionId(null);
+    }
+  }
+
+  async function toggleUserStatus(userId: number, nextStatus: boolean) {
+    setRowActionId(userId);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/status`, {
+        method: "PUT",
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ is_active: nextStatus }),
+      });
+      const raw = (await res.json().catch(() => null)) as UsersResponse | null;
+      if (!res.ok) {
+        showToast(raw?.message || `Could not update status (${res.status}).`, "error");
+        return;
+      }
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, is_active: nextStatus } : u)),
+      );
+      showToast(nextStatus ? "User reactivated." : "User deactivated.", "success");
+    } catch {
+      showToast("Network error while updating status.", "error");
+    } finally {
+      setRowActionId(null);
     }
   }
 
@@ -499,6 +587,35 @@ export default function AdminToolsPage() {
                 </p>
               </div>
 
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <SelectField
+                  label="Role"
+                  name="user_role"
+                  value={filterUserRole}
+                  onChange={(e) => setFilterUserRole(e.target.value)}
+                  disabled={usersLoading}
+                >
+                  <option value="">All roles</option>
+                  <option value="owner">owner</option>
+                  <option value="backend">backend</option>
+                  <option value="frontend">frontend</option>
+                  <option value="designer">designer</option>
+                  <option value="qa">qa</option>
+                  <option value="pm">pm</option>
+                </SelectField>
+
+                <Input
+                  label="Name / Email"
+                  name="user_search"
+                  value={filterUserSearch}
+                  onChange={(e) => setFilterUserSearch(e.target.value)}
+                  placeholder="Search users"
+                  autoComplete="off"
+                  disabled={usersLoading}
+                />
+
+              </div>
+
               {usersError ? (
                 <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{usersError}</p>
               ) : null}
@@ -513,7 +630,9 @@ export default function AdminToolsPage() {
                         <th className="px-3 py-2">Name</th>
                         <th className="px-3 py-2">Email</th>
                         <th className="px-3 py-2">Role</th>
+                        <th className="px-3 py-2">Status</th>
                         <th className="px-3 py-2">Created</th>
+                        <th className="px-3 py-2 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -521,9 +640,69 @@ export default function AdminToolsPage() {
                         <tr key={u.id} className="bg-white">
                           <td className="px-3 py-2 text-slate-900">{u.name}</td>
                           <td className="px-3 py-2 text-slate-700">{u.email}</td>
-                          <td className="px-3 py-2 capitalize text-slate-700">{u.role}</td>
+                          <td className="px-3 py-2">
+                            <select
+                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800"
+                              value={roleDraftByUserId[u.id] ?? u.role}
+                              onChange={(e) =>
+                                setRoleDraftByUserId((prev) => ({
+                                  ...prev,
+                                  [u.id]: e.target.value,
+                                }))
+                              }
+                              disabled={rowActionId === u.id || u.id === currentUserId}
+                            >
+                              <option value="owner">owner</option>
+                              <option value="backend">backend</option>
+                              <option value="frontend">frontend</option>
+                              <option value="designer">designer</option>
+                              <option value="qa">qa</option>
+                              <option value="pm">pm</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                u.is_active
+                                  ? "bg-emerald-100 text-emerald-900"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {u.is_active ? "Active" : "Inactive"}
+                            </span>
+                          </td>
                           <td className="px-3 py-2 text-slate-600">
                             {u.created_at ? new Date(u.created_at).toLocaleString() : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="!px-2.5 !py-1.5 !text-xs"
+                                disabled={
+                                  rowActionId === u.id ||
+                                  u.id === currentUserId ||
+                                  (roleDraftByUserId[u.id] ?? u.role) === u.role
+                                }
+                                onClick={() => void saveUserRole(u.id)}
+                              >
+                                Save role
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className={`!px-2.5 !py-1.5 !text-xs ${
+                                  u.is_active
+                                    ? "!border-red-200 !text-red-800"
+                                    : "!border-emerald-200 !text-emerald-800"
+                                }`}
+                                disabled={rowActionId === u.id || u.id === currentUserId}
+                                onClick={() => void toggleUserStatus(u.id, !u.is_active)}
+                              >
+                                {u.is_active ? "Deactivate" : "Reactivate"}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -571,7 +750,7 @@ export default function AdminToolsPage() {
         }
       />
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <Card className="space-y-4">
         <details
           className="group"
           open={filtersPanelOpen}
@@ -579,8 +758,8 @@ export default function AdminToolsPage() {
             if (!isLg) setFiltersOpen(e.currentTarget.open);
           }}
         >
-          <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-base font-semibold text-slate-900 lg:hidden [&::-webkit-details-marker]:hidden">
-            <span>Filters</span>
+          <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 py-1 text-base font-semibold text-slate-900 lg:hidden [&::-webkit-details-marker]:hidden">
+            <span>Tools</span>
             <svg
               className="h-5 w-5 text-slate-500 group-open:rotate-180"
               viewBox="0 0 20 20"
@@ -594,36 +773,18 @@ export default function AdminToolsPage() {
               />
             </svg>
           </summary>
-          <div className="border-t border-slate-100 px-4 pb-6 pt-2 lg:border-0 lg:px-6 lg:pb-6 lg:pt-6">
+          <div className="pt-2 lg:pt-0">
             <h2 className="mb-4 hidden text-lg font-semibold text-slate-900 lg:block">
-              Filters
+              Tools
             </h2>
-            <form
-              onSubmit={handleFilters}
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
-            >
-              <SelectField
-                label="Status"
-                name="approval_status"
-                value={filterStatus}
-                onChange={(e) =>
-                  setFilterStatus(e.target.value as "" | ApprovalStatus)
-                }
-                disabled={metadataLoading}
-              >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SelectField label="Status" name="approval_status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as "" | ApprovalStatus)} disabled={metadataLoading}>
                 <option value="">All statuses</option>
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
               </SelectField>
-
-              <SelectField
-                label="Category"
-                name="category_id"
-                value={filterCategoryId}
-                onChange={(e) => setFilterCategoryId(e.target.value)}
-                disabled={metadataLoading}
-              >
+              <SelectField label="Category" name="category_id" value={filterCategoryId} onChange={(e) => setFilterCategoryId(e.target.value)} disabled={metadataLoading}>
                 <option value="">All categories</option>
                 {(metadata?.categories ?? []).map((c) => (
                   <option key={c.id} value={String(c.id)}>
@@ -631,14 +792,7 @@ export default function AdminToolsPage() {
                   </option>
                 ))}
               </SelectField>
-
-              <SelectField
-                label="Role"
-                name="role_id"
-                value={filterRoleId}
-                onChange={(e) => setFilterRoleId(e.target.value)}
-                disabled={metadataLoading}
-              >
+              <SelectField label="Role" name="role_id" value={filterRoleId} onChange={(e) => setFilterRoleId(e.target.value)} disabled={metadataLoading}>
                 <option value="">All roles</option>
                 {(metadata?.roles ?? []).map((r) => (
                   <option key={r.id} value={String(r.id)}>
@@ -646,51 +800,28 @@ export default function AdminToolsPage() {
                   </option>
                 ))}
               </SelectField>
-
-              <Input
-                label="Name (search)"
-                name="search"
-                value={filterSearch}
-                onChange={(e) => setFilterSearch(e.target.value)}
-                placeholder="Search by name"
-                autoComplete="off"
-              />
-
-              <div className="flex items-end sm:col-span-2 lg:col-span-4">
-                <Button type="submit" variant="primary" disabled={listLoading}>
-                  {listLoading ? "Loading…" : "Apply filters"}
-                </Button>
-              </div>
-            </form>
+              <Input label="Name (search)" name="search" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} placeholder="Search by name" autoComplete="off" />
+            </div>
           </div>
         </details>
-      </div>
 
-      {listError ? (
-        <div
-          role="alert"
-          className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800"
-        >
-          {listError}
-        </div>
-      ) : null}
-
-      {listLoading && tools.length === 0 ? (
-        <p className="text-center text-slate-600">Loading…</p>
-      ) : null}
-
-      {!listLoading && tools.length === 0 ? (
-        <Card className="text-center text-slate-600">No tools match filters.</Card>
-      ) : null}
-
-      {tools.length > 0 ? (
-        <Card className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-slate-900">Tools</h3>
-            <p className="text-xs text-slate-500">
-              Showing {toolsPagination.from ?? 0}-{toolsPagination.to ?? 0} of {toolsPagination.total}
-            </p>
+        {listError ? (
+          <div role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">
+            {listError}
           </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <p className="text-xs text-slate-500">
+            Showing {toolsPagination.from ?? 0}-{toolsPagination.to ?? 0} of {toolsPagination.total}
+          </p>
+        </div>
+
+        {listLoading && tools.length === 0 ? (
+          <p className="text-center text-slate-600">Loading…</p>
+        ) : !listLoading && tools.length === 0 ? (
+          <p className="text-center text-slate-600">No tools match filters.</p>
+        ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -759,30 +890,30 @@ export default function AdminToolsPage() {
               </tbody>
             </table>
           </div>
+        )}
 
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={listLoading || toolsPagination.current_page <= 1}
-              onClick={() => void fetchTools(toolsPagination.current_page - 1)}
-            >
-              Prev
-            </Button>
-            <span className="text-sm text-slate-600">
-              Page {toolsPagination.current_page} / {toolsPagination.last_page}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={listLoading || toolsPagination.current_page >= toolsPagination.last_page}
-              onClick={() => void fetchTools(toolsPagination.current_page + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </Card>
-      ) : null}
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={listLoading || toolsPagination.current_page <= 1}
+            onClick={() => void fetchTools(toolsPagination.current_page - 1)}
+          >
+            Prev
+          </Button>
+          <span className="text-sm text-slate-600">
+            Page {toolsPagination.current_page} / {toolsPagination.last_page}
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={listLoading || toolsPagination.current_page >= toolsPagination.last_page}
+            onClick={() => void fetchTools(toolsPagination.current_page + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      </Card>
 
       <div className="space-y-6">
         <PageHeader
@@ -791,19 +922,9 @@ export default function AdminToolsPage() {
         />
 
         <Card className="space-y-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void fetchLogs(1);
-            }}
-            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          >
-            <SelectField
-              label="Action"
-              name="action"
-              value={filterLogAction}
-              onChange={(e) => setFilterLogAction(e.target.value)}
-            >
+          <h3 className="text-base font-semibold text-slate-900">Audit logs</h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <SelectField label="Action" name="action" value={filterLogAction} onChange={(e) => setFilterLogAction(e.target.value)}>
               <option value="">All actions</option>
               {logActions.map((action) => (
                 <option key={action} value={action}>
@@ -811,66 +932,18 @@ export default function AdminToolsPage() {
                 </option>
               ))}
             </SelectField>
-
-            <Input
-              label="User ID"
-              name="user_id"
-              value={filterLogUserId}
-              onChange={(e) => setFilterLogUserId(e.target.value)}
-              placeholder="e.g. 4"
-            />
-
-            <Input
-              label="Tool ID"
-              name="tool_id"
-              value={filterLogToolId}
-              onChange={(e) => setFilterLogToolId(e.target.value)}
-              placeholder="e.g. 12"
-            />
-
-            <Input
-              label="From"
-              name="from"
-              type="datetime-local"
-              value={filterLogFrom}
-              onChange={(e) => setFilterLogFrom(e.target.value)}
-            />
-
-            <Input
-              label="To"
-              name="to"
-              type="datetime-local"
-              value={filterLogTo}
-              onChange={(e) => setFilterLogTo(e.target.value)}
-            />
-
-            <Input
-              label="Search"
-              name="search"
-              value={filterLogSearch}
-              onChange={(e) => setFilterLogSearch(e.target.value)}
-              placeholder="action, user, email, tool..."
-            />
-
-            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={logsLoading}
-              >
-                {logsLoading ? "Loading…" : "Apply filters"}
-              </Button>
-            </div>
-          </form>
+            <Input label="User ID" name="user_id" value={filterLogUserId} onChange={(e) => setFilterLogUserId(e.target.value)} placeholder="e.g. 4" />
+            <Input label="Tool ID" name="tool_id" value={filterLogToolId} onChange={(e) => setFilterLogToolId(e.target.value)} placeholder="e.g. 12" />
+            <Input label="From" name="from" type="datetime-local" value={filterLogFrom} onChange={(e) => setFilterLogFrom(e.target.value)} />
+            <Input label="To" name="to" type="datetime-local" value={filterLogTo} onChange={(e) => setFilterLogTo(e.target.value)} />
+            <Input label="Search" name="search" value={filterLogSearch} onChange={(e) => setFilterLogSearch(e.target.value)} placeholder="action, user, email, tool..." />
+          </div>
 
           {logsError ? (
             <p className="text-sm text-red-700">{logsError}</p>
           ) : null}
-        </Card>
 
-        <Card className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-slate-900">Audit logs</h3>
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <p className="text-xs text-slate-500">
               Showing {logsPagination.from ?? 0}-{logsPagination.to ?? 0} of {logsPagination.total}
             </p>
@@ -886,7 +959,7 @@ export default function AdminToolsPage() {
                     <th className="px-3 py-2">When</th>
                     <th className="px-3 py-2">Action</th>
                     <th className="px-3 py-2">User</th>
-                    <th className="px-3 py-2">Tool</th>
+                    <th className="px-3 py-2">Tool/User</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -902,7 +975,7 @@ export default function AdminToolsPage() {
                         {row.user ? `${row.user.name} (${row.user.role})` : "—"}
                       </td>
                       <td className="px-3 py-2 text-slate-600">
-                        {row.tool ? `${row.tool.name} (#${row.tool.id})` : "—"}
+                        {formatLogTarget(row)}
                       </td>
                     </tr>
                   ))}

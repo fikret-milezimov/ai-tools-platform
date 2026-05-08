@@ -57,6 +57,12 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => ['This account is deactivated. Contact an administrator.'],
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
 
         return $user;

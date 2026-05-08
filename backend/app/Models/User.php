@@ -18,7 +18,7 @@ class User extends Authenticatable
      * @var array<string, mixed>
      */
     protected $attributes = [
-        'two_factor_email_enabled' => true,
+        'two_factor_email_enabled' => false,
     ];
 
     /**
@@ -31,6 +31,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'is_active',
         'two_factor_email_enabled',
         'two_factor_totp_secret',
         'two_factor_totp_enabled_at',
@@ -57,6 +58,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
             'two_factor_email_enabled' => 'boolean',
             'two_factor_totp_secret' => 'encrypted',
             'two_factor_totp_enabled_at' => 'datetime',

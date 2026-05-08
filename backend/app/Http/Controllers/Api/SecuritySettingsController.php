@@ -39,12 +39,6 @@ class SecuritySettingsController extends Controller
 
         $user = $request->user();
 
-        if (! $data['enabled'] && ! $user->hasAnotherTwoFactorMethodBesides('email')) {
-            throw ValidationException::withMessages([
-                'enabled' => ['Keep at least one 2FA method enabled. Enable Google Authenticator before turning off email 2FA.'],
-            ]);
-        }
-
         $user->update([
             'two_factor_email_enabled' => (bool) $data['enabled'],
         ]);
@@ -136,12 +130,6 @@ class SecuritySettingsController extends Controller
     public function disableTotp(Request $request): JsonResponse
     {
         $user = $request->user();
-
-        if (! $user->hasAnotherTwoFactorMethodBesides('totp')) {
-            throw ValidationException::withMessages([
-                'totp' => ['Keep at least one 2FA method enabled. Enable email 2FA before disabling the authenticator app.'],
-            ]);
-        }
 
         $user->update([
             'two_factor_totp_secret' => null,

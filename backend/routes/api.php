@@ -45,6 +45,8 @@ Route::middleware(['auth:sanctum', 'role:owner,pm'])->prefix('admin')->group(fun
 Route::middleware(['auth:sanctum', 'role:owner'])->prefix('admin')->group(function () {
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::post('/users', [AdminUserController::class, 'store']);
+    Route::put('/users/{user}/role', [AdminUserController::class, 'updateRole']);
+    Route::put('/users/{user}/status', [AdminUserController::class, 'updateStatus']);
 });
 
 Route::get('/tool-metadata', ToolMetadataController::class);
