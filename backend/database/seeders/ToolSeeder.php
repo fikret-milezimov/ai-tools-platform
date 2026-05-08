@@ -13,7 +13,14 @@ class ToolSeeder extends Seeder
 {
     public function run(): void
     {
-        $userId = User::query()->value('id');
+        // Attribute tools to an owner so non-owner demo users (e.g. frontend) are not creators.
+        // Avoid User::query()->value('id') without order — that row is DB-dependent and can be any user.
+        $userId = User::query()
+            ->where('role', 'owner')
+            ->orderBy('id')
+            ->value('id')
+            ?? User::query()->orderBy('id')->value('id');
+
         if (! $userId) {
             return;
         }

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Tool;
 use App\Models\User;
 use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminUserController extends Controller
 {
@@ -210,6 +212,68 @@ class AdminUserController extends Controller
                 'is_active' => (bool) $user->is_active,
             ],
         ]);
+    }
+
+    public function destroy(Request $request, User $user): JsonResponse
+    {
+        $actor = $request->user();
+        if (! $actor) {
+            abort(401);
+        }
+        if ((int) $actor->id === (int) $user->id) {
+            abort(422, 'You cannot delete your own account.');
+        }
+
+        if ($user->role === 'owner' && $user->is_active && $this->activeOwnersCount() <= 1) {
+            abort(422, 'At least one active owner must remain.');
+        }
+
+        $toolsOwned = Tool::query()->where('created_by', $user->id)->count();
+        $replacementId = $this->toolCreatorReassignmentId((int) $user->id);
+        if ($toolsOwned > 0 && $replacementId === null) {
+            abort(422, 'Cannot delete user: no other user exists to reassign tool ownership.');
+        }
+
+        $deletedEmail = $user->email;
+        $deletedId = (int) $user->id;
+
+        DB::transaction(function () use ($user, $replacementId, $toolsOwned, $actor, $deletedId, $deletedEmail): void {
+            if ($toolsOwned > 0) {
+                Tool::query()->where('created_by', $user->id)->update(['created_by' => $replacementId]);
+            }
+            $user->tokens()->delete();
+
+            AuditLogger::log($actor, 'user.deleted', null, [
+                'target_user_id' => $deletedId,
+                'target_user_email' => $deletedEmail,
+            ]);
+
+            $user->delete();
+        });
+
+        return response()->json(['message' => 'User deleted.']);
+    }
+
+    private function toolCreatorReassignmentId(int $excludeUserId): ?int
+    {
+        $preferOwner = User::query()
+            ->where('id', '!=', $excludeUserId)
+            ->where('role', 'owner')
+            ->orderByDesc('is_active')
+            ->orderBy('id')
+            ->value('id');
+
+        if ($preferOwner !== null) {
+            return (int) $preferOwner;
+        }
+
+        $any = User::query()
+            ->where('id', '!=', $excludeUserId)
+            ->orderByDesc('is_active')
+            ->orderBy('id')
+            ->value('id');
+
+        return $any !== null ? (int) $any : null;
     }
 
     private function activeOwnersCount(): int

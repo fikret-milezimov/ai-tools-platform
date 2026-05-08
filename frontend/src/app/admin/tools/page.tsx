@@ -13,6 +13,7 @@ import { useToast } from "@/components/ToastProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { SelectField } from "@/components/ui/SelectField";
 
@@ -134,6 +135,11 @@ export default function AdminToolsPage() {
   const [filterUserRole, setFilterUserRole] = useState("");
   const [filterUserSearch, setFilterUserSearch] = useState("");
   const [rowActionId, setRowActionId] = useState<number | null>(null);
+  const [userDeleteTarget, setUserDeleteTarget] = useState<{
+    id: number;
+    name: string;
+    email: string;
+  } | null>(null);
   const [roleDraftByUserId, setRoleDraftByUserId] = useState<Record<number, string>>({});
 
   type ToolsResponse = {
@@ -511,6 +517,40 @@ export default function AdminToolsPage() {
     }
   }
 
+  async function confirmDeleteUser() {
+    if (!userDeleteTarget) {
+      return;
+    }
+    const { id: deleteId } = userDeleteTarget;
+    setRowActionId(deleteId);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${deleteId}`, {
+        method: "DELETE",
+        headers: authJsonHeaders(),
+      });
+      const raw = (await res.json().catch(() => null)) as { message?: string } | null;
+      if (!res.ok) {
+        showToast(
+          typeof raw?.message === "string" ? raw.message : `Could not delete user (${res.status}).`,
+          "error",
+        );
+        return;
+      }
+      showToast(typeof raw?.message === "string" ? raw.message : "User deleted.", "success");
+      setUserDeleteTarget(null);
+      setRoleDraftByUserId((prev) => {
+        const next = { ...prev };
+        delete next[deleteId];
+        return next;
+      });
+      await fetchUsers(usersPagination.current_page);
+    } catch {
+      showToast("Network error while deleting user.", "error");
+    } finally {
+      setRowActionId(null);
+    }
+  }
+
   async function approveTool(id: number) {
     setActionId(id);
     try {
@@ -756,6 +796,21 @@ export default function AdminToolsPage() {
                               >
                                 {u.is_active ? "Deactivate" : "Reactivate"}
                               </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="!border-red-200 !px-2.5 !py-1.5 !text-xs !text-red-800"
+                                disabled={rowActionId === u.id || u.id === currentUserId}
+                                onClick={() =>
+                                  setUserDeleteTarget({
+                                    id: u.id,
+                                    name: u.name,
+                                    email: u.email,
+                                  })
+                                }
+                              >
+                                Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -786,6 +841,27 @@ export default function AdminToolsPage() {
                   Next
                 </Button>
               </div>
+
+              <ConfirmDialog
+                open={userDeleteTarget !== null}
+                title="Delete user?"
+                description={
+                  userDeleteTarget
+                    ? `Permanently remove ${userDeleteTarget.email}? Tools they created remain in the catalog; ownership is reassigned. Their ratings and comments are removed. This cannot be undone.`
+                    : undefined
+                }
+                confirmLabel="Delete user"
+                loading={
+                  userDeleteTarget !== null && rowActionId !== null && rowActionId === userDeleteTarget.id
+                }
+                onClose={() => {
+                  if (rowActionId !== null) {
+                    return;
+                  }
+                  setUserDeleteTarget(null);
+                }}
+                onConfirm={() => void confirmDeleteUser()}
+              />
             </Card>
           </>
         )}

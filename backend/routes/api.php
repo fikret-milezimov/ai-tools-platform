@@ -47,6 +47,7 @@ Route::middleware(['auth:sanctum', 'active', 'role:owner'])->prefix('admin')->gr
     Route::post('/users', [AdminUserController::class, 'store']);
     Route::put('/users/{user}/role', [AdminUserController::class, 'updateRole']);
     Route::put('/users/{user}/status', [AdminUserController::class, 'updateStatus']);
+    Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
 });
 
 Route::get('/tool-metadata', ToolMetadataController::class);
