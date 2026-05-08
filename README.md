@@ -6,7 +6,14 @@ Production-style monorepo containing a **Laravel 12** JSON API backend and a **N
 
 The application is deployed on AWS EC2 using Docker Compose.
 
-- Frontend: http://34.198.222.7:8200/login (Use EMAIL: fetata89@gmail.com and PASSWORD: password to enter lika a ROLE: owner )
+- Frontend: http://34.198.222.7:8200/login
+
+  Demo owner account:
+
+  - Email: `fetata89@gmail.com`
+  - Password: `password`
+  - Role: `owner`
+  
 - Backend API: http://34.198.222.7:8201/api/status
 
 ## Project overview
