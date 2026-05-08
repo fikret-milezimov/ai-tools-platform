@@ -2,6 +2,13 @@
 
 Production-style monorepo containing a **Laravel 12** JSON API backend and a **Next.js 15** frontend (React 19 + TypeScript). The platform includes authentication with Laravel Sanctum, role-based access control, AI tools management, admin approval workflows, ratings and comments, audit logging, and optional 2FA support.
 
+## 🚀 Live Demo
+
+The application is deployed on AWS EC2 using Docker Compose.
+
+- Frontend: http://34.198.222.7:8200/login
+- Backend API: http://34.198.222.7:8201/api/status
+
 ## Project overview
 
 This project simulates an internal company platform where teams can discover, review, and manage AI tools in a centralized environment.
