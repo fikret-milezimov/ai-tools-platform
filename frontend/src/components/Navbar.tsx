@@ -37,6 +37,9 @@ function matchesPath(pathname: string, href: string): boolean {
   if (href === "/tools") {
     return pathname === "/tools" || pathname.startsWith("/tools/");
   }
+  if (href === "/settings/security") {
+    return pathname === "/settings/security" || pathname.startsWith("/settings/");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -148,6 +151,14 @@ export function Navbar() {
                     onClick={closeAccountMenu}
                   >
                     Profile
+                  </Link>
+                  <Link
+                    href="/settings/security"
+                    className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
+                    role="menuitem"
+                    onClick={closeAccountMenu}
+                  >
+                    Security settings
                   </Link>
                   <button
                     type="button"

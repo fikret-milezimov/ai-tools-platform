@@ -10,6 +10,9 @@ export type Tool = {
   link: string;
   description: string;
   image_url?: string | null;
+  /** Present when listing from API; used for edit/delete permissions. */
+  created_by?: number;
+  creator?: { id: number; name: string; email: string };
   approval_status?: ApprovalStatus;
   categories?: { id: number; name: string }[];
   tags?: { id: number; name: string }[];
@@ -29,4 +32,22 @@ export type Metadata = {
   categories: Category[];
   tags: Tag[];
   roles: RoleRow[];
+};
+
+export type AuditLogRow = {
+  id: number;
+  action: string;
+  meta?: Record<string, unknown> | null;
+  created_at?: string | null;
+  user?: { id: number; name: string; email: string; role: string } | null;
+  tool?: { id: number; name: string; approval_status?: ApprovalStatus } | null;
+};
+
+export type PaginationMeta = {
+  current_page: number;
+  per_page: number;
+  total: number;
+  last_page: number;
+  from: number | null;
+  to: number | null;
 };

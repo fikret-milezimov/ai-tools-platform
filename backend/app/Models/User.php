@@ -15,6 +15,13 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'two_factor_email_enabled' => true,
+    ];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -25,8 +32,8 @@ class User extends Authenticatable
         'password',
         'role',
         'two_factor_email_enabled',
-        'two_factor_telegram_chat_id',
         'two_factor_totp_secret',
+        'two_factor_totp_enabled_at',
     ];
 
     /**
@@ -52,6 +59,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'two_factor_email_enabled' => 'boolean',
             'two_factor_totp_secret' => 'encrypted',
+            'two_factor_totp_enabled_at' => 'datetime',
         ];
     }
 
@@ -59,10 +67,8 @@ class User extends Authenticatable
     {
         return match ($method) {
             'email' => (bool) $this->two_factor_email_enabled,
-            'telegram' => $this->two_factor_telegram_chat_id !== null
-                && $this->two_factor_telegram_chat_id !== ''
-                && filled(config('services.telegram.bot_token')),
-            'totp' => filled($this->two_factor_totp_secret),
+            'totp' => filled($this->two_factor_totp_secret)
+                && $this->two_factor_totp_enabled_at !== null,
             default => false,
         };
     }
@@ -73,7 +79,7 @@ class User extends Authenticatable
     public function availableTwoFactorMethods(): array
     {
         $out = [];
-        foreach (['email', 'telegram', 'totp'] as $id) {
+        foreach (['email', 'totp'] as $id) {
             if (! $this->canUseTwoFactorMethod($id)) {
                 continue;
             }
@@ -81,7 +87,6 @@ class User extends Authenticatable
                 'id' => $id,
                 'label' => match ($id) {
                     'email' => 'Email',
-                    'telegram' => 'Telegram',
                     'totp' => 'Authenticator app',
                     default => $id,
                 },
@@ -94,6 +99,13 @@ class User extends Authenticatable
     public function requiresTwoFactor(): bool
     {
         return $this->availableTwoFactorMethods() !== [];
+    }
+
+    public function hasAnotherTwoFactorMethodBesides(string $method): bool
+    {
+        $active = array_column($this->availableTwoFactorMethods(), 'id');
+
+        return count(array_diff($active, [$method])) > 0;
     }
 
     public function tools(): HasMany

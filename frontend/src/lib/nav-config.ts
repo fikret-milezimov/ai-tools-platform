@@ -13,7 +13,7 @@ const adminTools: NavItem = { href: "/admin/tools", label: "Admin" };
 
 export function navItemsForRole(role: string | null): NavItem[] {
   const items: NavItem[] = [dashboard, tools];
-  if (role === "owner") {
+  if (role === "owner" || role === "pm") {
     items.push(adminTools);
   }
   return items;

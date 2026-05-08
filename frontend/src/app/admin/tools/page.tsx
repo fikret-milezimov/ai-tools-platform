@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { API_BASE } from "@/lib/api";
 import { getStoredUser, getToken } from "@/lib/auth-storage";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { authJsonHeaders, unwrapApiData } from "@/lib/tools-helpers";
-import type { ApprovalStatus, Metadata, Tool } from "@/lib/tools-types";
+import type { ApprovalStatus, AuditLogRow, Metadata, PaginationMeta, Tool } from "@/lib/tools-types";
 import { useToast } from "@/components/ToastProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -36,24 +36,77 @@ function statusBadge(status: ApprovalStatus | undefined) {
   );
 }
 
+function formatWhen(value?: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
+
+function prettyAction(action: string): string {
+  return action.replaceAll(".", " ");
+}
+
 export default function AdminToolsPage() {
+  const pathname = usePathname();
   const router = useRouter();
   const { showToast } = useToast();
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(true);
   const [tools, setTools] = useState<Tool[]>([]);
+  const [toolsPagination, setToolsPagination] = useState<PaginationMeta>({
+    current_page: 1,
+    per_page: 10,
+    total: 0,
+    last_page: 1,
+    from: null,
+    to: null,
+  });
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
+
+  type ToolsResponse = {
+    tools?: Tool[];
+    pagination?: PaginationMeta;
+    data?: Tool[];
+  };
+
+  type LogsResponse = {
+    logs?: AuditLogRow[];
+    pagination?: PaginationMeta;
+    filters?: { actions?: string[] };
+  };
 
   const [filterStatus, setFilterStatus] = useState<"" | ApprovalStatus>("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
   const [filterRoleId, setFilterRoleId] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
 
+  const [logs, setLogs] = useState<AuditLogRow[]>([]);
+  const [logsPagination, setLogsPagination] = useState<PaginationMeta>({
+    current_page: 1,
+    per_page: 10,
+    total: 0,
+    last_page: 1,
+    from: null,
+    to: null,
+  });
+  const [logActions, setLogActions] = useState<string[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
+
+  const [filterLogAction, setFilterLogAction] = useState("");
+  const [filterLogUserId, setFilterLogUserId] = useState("");
+  const [filterLogToolId, setFilterLogToolId] = useState("");
+  const [filterLogFrom, setFilterLogFrom] = useState("");
+  const [filterLogTo, setFilterLogTo] = useState("");
+  const [filterLogSearch, setFilterLogSearch] = useState("");
+
   const isLg = useMediaQuery("(min-width: 1024px)");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelOpen = isLg || filtersOpen;
+  const returnTo = pathname;
 
   useEffect(() => {
     const u = getStoredUser();
@@ -61,7 +114,7 @@ export default function AdminToolsPage() {
       router.replace("/login");
       return;
     }
-    if (u.role !== "owner") {
+    if (u.role !== "owner" && u.role !== "pm") {
       router.replace("/dashboard");
     }
   }, [router]);
@@ -83,12 +136,14 @@ export default function AdminToolsPage() {
     }
   }, []);
 
-  const fetchTools = useCallback(async () => {
+  const fetchTools = useCallback(async (page = 1) => {
     if (!getToken()) return;
     setListLoading(true);
     setListError(null);
     try {
       const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("per_page", "10");
       if (filterStatus) params.set("approval_status", filterStatus);
       if (filterCategoryId) params.set("category_id", filterCategoryId);
       if (filterRoleId) params.set("role_id", filterRoleId);
@@ -100,17 +155,22 @@ export default function AdminToolsPage() {
         `${API_BASE}/api/admin/tools${qs ? `?${qs}` : ""}`,
         { headers: authJsonHeaders() },
       );
-      const raw = await res.json().catch(() => null);
+      const raw = (await res.json().catch(() => null)) as ToolsResponse | null;
       if (!res.ok) {
         const msg =
-          (raw as { message?: string })?.message ??
+          (raw as { message?: string } | null)?.message ??
           `Failed to load (${res.status})`;
         setListError(typeof msg === "string" ? msg : "Failed to load tools.");
         setTools([]);
         return;
       }
-      const unwrapped = unwrapApiData<Tool[]>(raw);
+      const list =
+        Array.isArray(raw?.tools) ? raw.tools : Array.isArray(raw?.data) ? raw.data : [];
+      const unwrapped = unwrapApiData<Tool[]>(list);
       setTools(Array.isArray(unwrapped) ? unwrapped : []);
+      if (raw?.pagination) {
+        setToolsPagination(raw.pagination);
+      }
     } catch {
       setListError("Network error.");
       setTools([]);
@@ -132,9 +192,74 @@ export default function AdminToolsPage() {
     void fetchTools();
   }, [fetchTools]);
 
+  const fetchLogs = useCallback(
+    async (page = 1) => {
+      if (!getToken()) return;
+      setLogsLoading(true);
+      setLogsError(null);
+
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(page));
+        params.set("per_page", "10");
+        if (filterLogAction) params.set("action", filterLogAction);
+        if (filterLogUserId) params.set("user_id", filterLogUserId);
+        if (filterLogToolId) params.set("tool_id", filterLogToolId);
+        if (filterLogFrom) params.set("from", filterLogFrom);
+        if (filterLogTo) params.set("to", filterLogTo);
+        const q = filterLogSearch.trim();
+        if (q) params.set("search", q);
+
+        const res = await fetch(
+          `${API_BASE}/api/admin/logs?${params.toString()}`,
+          { headers: authJsonHeaders() },
+        );
+        const raw = (await res.json().catch(() => null)) as LogsResponse | null;
+        if (!res.ok || !raw) {
+          const message =
+            (raw as { message?: string } | null)?.message ??
+            `Failed to load logs (${res.status}).`;
+          setLogsError(message);
+          setLogs([]);
+          return;
+        }
+
+        setLogs(Array.isArray(raw.logs) ? raw.logs : []);
+        setLogActions(
+          Array.isArray(raw.filters?.actions)
+            ? raw.filters.actions.filter((a): a is string => typeof a === "string")
+            : [],
+        );
+        if (raw.pagination) {
+          setLogsPagination(raw.pagination);
+        }
+      } catch {
+        setLogsError("Network error while loading admin logs.");
+        setLogs([]);
+      } finally {
+        setLogsLoading(false);
+      }
+    },
+    [
+      filterLogAction,
+      filterLogFrom,
+      filterLogSearch,
+      filterLogTo,
+      filterLogToolId,
+      filterLogUserId,
+    ],
+  );
+
+  useEffect(() => {
+    const u = getStoredUser();
+    if (!getToken() || !u) return;
+    if (u.role !== "owner" && u.role !== "pm") return;
+    void fetchLogs(1);
+  }, [fetchLogs]);
+
   async function handleFilters(e: FormEvent) {
     e.preventDefault();
-    await fetchTools();
+    await fetchTools(1);
   }
 
   async function approveTool(id: number) {
@@ -157,7 +282,7 @@ export default function AdminToolsPage() {
         return;
       }
       showToast("Tool approved.", "success");
-      await fetchTools();
+      await fetchTools(toolsPagination.current_page);
     } catch {
       showToast("Network error.", "error");
     } finally {
@@ -185,7 +310,7 @@ export default function AdminToolsPage() {
         return;
       }
       showToast("Tool rejected.", "success");
-      await fetchTools();
+      await fetchTools(toolsPagination.current_page);
     } catch {
       showToast("Network error.", "error");
     } finally {
@@ -321,75 +446,256 @@ export default function AdminToolsPage() {
       ) : null}
 
       {tools.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-3">Tool</th>
-                <th className="hidden px-4 py-3 sm:table-cell">Status</th>
-                <th className="hidden px-4 py-3 md:table-cell">Categories</th>
-                <th className="hidden px-4 py-3 lg:table-cell">Roles</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {tools.map((t) => (
-                <tr key={t.id} className="bg-white hover:bg-slate-50/80">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{t.name}</div>
-                    <div className="mt-1 sm:hidden">
-                      {statusBadge(t.approval_status)}
-                    </div>
-                  </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
-                    {statusBadge(t.approval_status)}
-                  </td>
-                  <td className="hidden max-w-[12rem] px-4 py-3 text-slate-600 md:table-cell">
-                    {t.categories?.map((c) => c.name).join(", ") || "—"}
-                  </td>
-                  <td className="hidden max-w-[12rem] px-4 py-3 text-slate-600 lg:table-cell">
-                    {t.roles?.map((r) => r.name).join(", ") || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      {t.approval_status === "pending" ||
-                      t.approval_status === "rejected" ? (
-                        <Button
-                          type="button"
-                          variant="primary"
-                          className="!py-1.5 !text-xs"
-                          disabled={actionId === t.id}
-                          onClick={() => void approveTool(t.id)}
-                        >
-                          {actionId === t.id ? "…" : "Approve"}
-                        </Button>
-                      ) : null}
-                      {t.approval_status === "pending" ||
-                      t.approval_status === "approved" ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="!border-red-200 !py-1.5 !text-xs !text-red-800"
-                          disabled={actionId === t.id}
-                          onClick={() => void rejectTool(t.id)}
-                        >
-                          Reject
-                        </Button>
-                      ) : null}
-                      <Link
-                        href={`/tools/${t.id}/edit`}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
-                      >
-                        Edit
-                      </Link>
-                    </div>
-                  </td>
+        <Card className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-slate-900">Tools</h3>
+            <p className="text-xs text-slate-500">
+              Showing {toolsPagination.from ?? 0}-{toolsPagination.to ?? 0} of {toolsPagination.total}
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <tr>
+                  <th className="px-4 py-3">Tool</th>
+                  <th className="hidden px-4 py-3 sm:table-cell">Status</th>
+                  <th className="hidden px-4 py-3 md:table-cell">Categories</th>
+                  <th className="hidden px-4 py-3 lg:table-cell">Roles</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {tools.map((t) => (
+                  <tr key={t.id} className="bg-white hover:bg-slate-50/80">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{t.name}</div>
+                      <div className="mt-1 sm:hidden">
+                        {statusBadge(t.approval_status)}
+                      </div>
+                    </td>
+                    <td className="hidden px-4 py-3 sm:table-cell">
+                      {statusBadge(t.approval_status)}
+                    </td>
+                    <td className="hidden max-w-[12rem] px-4 py-3 text-slate-600 md:table-cell">
+                      {t.categories?.map((c) => c.name).join(", ") || "—"}
+                    </td>
+                    <td className="hidden max-w-[12rem] px-4 py-3 text-slate-600 lg:table-cell">
+                      {t.roles?.map((r) => r.name).join(", ") || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {t.approval_status === "pending" ||
+                        t.approval_status === "rejected" ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            className="!py-1.5 !text-xs"
+                            disabled={actionId === t.id}
+                            onClick={() => void approveTool(t.id)}
+                          >
+                            {actionId === t.id ? "…" : "Approve"}
+                          </Button>
+                        ) : null}
+                        {t.approval_status === "pending" ||
+                        t.approval_status === "approved" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="!border-red-200 !py-1.5 !text-xs !text-red-800"
+                            disabled={actionId === t.id}
+                            onClick={() => void rejectTool(t.id)}
+                          >
+                            Reject
+                          </Button>
+                        ) : null}
+                        <Link
+                          href={`/tools/${t.id}/edit?returnTo=${encodeURIComponent(returnTo)}`}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                        >
+                          Edit
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={listLoading || toolsPagination.current_page <= 1}
+              onClick={() => void fetchTools(toolsPagination.current_page - 1)}
+            >
+              Prev
+            </Button>
+            <span className="text-sm text-slate-600">
+              Page {toolsPagination.current_page} / {toolsPagination.last_page}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={listLoading || toolsPagination.current_page >= toolsPagination.last_page}
+              onClick={() => void fetchTools(toolsPagination.current_page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </Card>
       ) : null}
+
+      <div className="space-y-6">
+        <PageHeader
+          title="Admin — logs"
+          description="Audit activity by user, tool and action."
+        />
+
+        <Card className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void fetchLogs(1);
+            }}
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <SelectField
+              label="Action"
+              name="action"
+              value={filterLogAction}
+              onChange={(e) => setFilterLogAction(e.target.value)}
+            >
+              <option value="">All actions</option>
+              {logActions.map((action) => (
+                <option key={action} value={action}>
+                  {prettyAction(action)}
+                </option>
+              ))}
+            </SelectField>
+
+            <Input
+              label="User ID"
+              name="user_id"
+              value={filterLogUserId}
+              onChange={(e) => setFilterLogUserId(e.target.value)}
+              placeholder="e.g. 4"
+            />
+
+            <Input
+              label="Tool ID"
+              name="tool_id"
+              value={filterLogToolId}
+              onChange={(e) => setFilterLogToolId(e.target.value)}
+              placeholder="e.g. 12"
+            />
+
+            <Input
+              label="From"
+              name="from"
+              type="datetime-local"
+              value={filterLogFrom}
+              onChange={(e) => setFilterLogFrom(e.target.value)}
+            />
+
+            <Input
+              label="To"
+              name="to"
+              type="datetime-local"
+              value={filterLogTo}
+              onChange={(e) => setFilterLogTo(e.target.value)}
+            />
+
+            <Input
+              label="Search"
+              name="search"
+              value={filterLogSearch}
+              onChange={(e) => setFilterLogSearch(e.target.value)}
+              placeholder="action, user, email, tool..."
+            />
+
+            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={logsLoading}
+              >
+                {logsLoading ? "Loading…" : "Apply filters"}
+              </Button>
+            </div>
+          </form>
+
+          {logsError ? (
+            <p className="text-sm text-red-700">{logsError}</p>
+          ) : null}
+        </Card>
+
+        <Card className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-slate-900">Audit logs</h3>
+            <p className="text-xs text-slate-500">
+              Showing {logsPagination.from ?? 0}-{logsPagination.to ?? 0} of {logsPagination.total}
+            </p>
+          </div>
+
+          {logs.length === 0 ? (
+            <p className="text-sm text-slate-600">No logs match the filters.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2">When</th>
+                    <th className="px-3 py-2">Action</th>
+                    <th className="px-3 py-2">User</th>
+                    <th className="px-3 py-2">Tool</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {logs.map((row) => (
+                    <tr key={row.id} className="bg-white">
+                      <td className="px-3 py-2 text-slate-600">
+                        {formatWhen(row.created_at)}
+                      </td>
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        {prettyAction(row.action)}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {row.user ? `${row.user.name} (${row.user.role})` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {row.tool ? `${row.tool.name} (#${row.tool.id})` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={logsLoading || logsPagination.current_page <= 1}
+              onClick={() => void fetchLogs(logsPagination.current_page - 1)}
+            >
+              Prev
+            </Button>
+            <span className="text-sm text-slate-600">
+              Page {logsPagination.current_page} / {logsPagination.last_page}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={logsLoading || logsPagination.current_page >= logsPagination.last_page}
+              onClick={() => void fetchLogs(logsPagination.current_page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

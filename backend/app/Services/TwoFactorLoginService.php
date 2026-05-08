@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Mail\LoginOtpMail;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use PragmaRX\Google2FA\Google2FA;
 
@@ -15,7 +14,7 @@ class TwoFactorLoginService
 
     private const MAX_ATTEMPTS = 5;
 
-    private const METHODS = ['email', 'telegram', 'totp'];
+    private const METHODS = ['email', 'totp'];
 
     /**
      * @return array{pending_token: string, methods: list<array{id: string, label: string}>}
@@ -45,7 +44,7 @@ class TwoFactorLoginService
     }
 
     /**
-     * Start the chosen method: send OTP for email/telegram, or mark totp for app-based verification.
+     * Start the chosen method: send OTP for email, or mark totp for app-based verification.
      *
      * @throws \InvalidArgumentException
      */
@@ -74,6 +73,8 @@ class TwoFactorLoginService
         if ($method === 'totp') {
             $payload['method'] = 'totp';
             $payload['code_hash'] = null;
+            $payload['expires_at'] = time() + self::TTL_SECONDS;
+            $payload['attempts'] = 0;
             Cache::put($key, $payload, self::TTL_SECONDS + 120);
 
             return;
@@ -86,13 +87,14 @@ class TwoFactorLoginService
         $payload['expires_at'] = time() + self::TTL_SECONDS;
         Cache::put($key, $payload, self::TTL_SECONDS + 120);
 
-        if ($method === 'email') {
+        try {
             Mail::to($user->email)->send(new LoginOtpMail($plainCode, $user->name));
-
-            return;
+        } catch (\Throwable $e) {
+            report($e);
+            throw new \RuntimeException(
+                'Could not send the login email. Configure MAIL_MAILER, MAIL_HOST, and related settings in .env for production.'
+            );
         }
-
-        $this->sendTelegramOtp($user, $plainCode);
     }
 
     public function verify(string $pendingToken, string $method, string $code): ?User
@@ -171,7 +173,7 @@ class TwoFactorLoginService
     }
 
     /**
-     * Resend OTP for email or telegram only.
+     * Resend OTP for email only.
      */
     public function resend(string $pendingToken): bool
     {
@@ -189,7 +191,7 @@ class TwoFactorLoginService
         }
 
         $method = $payload['method'] ?? null;
-        if ($method !== 'email' && $method !== 'telegram') {
+        if ($method !== 'email') {
             return false;
         }
 
@@ -207,10 +209,13 @@ class TwoFactorLoginService
 
         Cache::put($key, $payload, self::TTL_SECONDS + 120);
 
-        if ($method === 'email') {
+        try {
             Mail::to($user->email)->send(new LoginOtpMail($plainCode, $user->name));
-        } else {
-            $this->sendTelegramOtp($user, $plainCode);
+        } catch (\Throwable $e) {
+            report($e);
+            throw new \RuntimeException(
+                'Could not send the login email. Configure MAIL_MAILER, MAIL_HOST, and related settings in .env for production.'
+            );
         }
 
         return true;
@@ -219,27 +224,6 @@ class TwoFactorLoginService
     private function generateOtp(): string
     {
         return str_pad((string) random_int(0, 999_999), 6, '0', STR_PAD_LEFT);
-    }
-
-    private function sendTelegramOtp(User $user, string $plainCode): void
-    {
-        $token = config('services.telegram.bot_token');
-        $chatId = $user->two_factor_telegram_chat_id;
-        if ($token === null || $token === '' || $chatId === null || $chatId === '') {
-            throw new \RuntimeException('Telegram is not configured for this server or your account.');
-        }
-
-        $response = Http::timeout(10)->post(
-            'https://api.telegram.org/bot'.$token.'/sendMessage',
-            [
-                'chat_id' => $chatId,
-                'text' => 'Your sign-in code: '.$plainCode."\n\nValid for 10 minutes. If you did not try to sign in, ignore this message.",
-            ],
-        );
-
-        if (! $response->successful()) {
-            throw new \RuntimeException('Could not send Telegram message.');
-        }
     }
 
     private function cacheKey(string $pendingToken): string

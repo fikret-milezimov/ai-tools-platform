@@ -7,6 +7,8 @@ use App\Http\Requests\StoreToolRequest;
 use App\Http\Requests\UpdateToolRequest;
 use App\Http\Resources\ToolResource;
 use App\Models\Tool;
+use App\Models\User;
+use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -81,6 +83,7 @@ class ToolController extends Controller
         $tool->roles()->sync($roleIds);
 
         $tool->load(['creator:id,name,email', 'categories', 'tags', 'roles']);
+        AuditLogger::log($request->user(), 'tool.created', $tool);
 
         return (new ToolResource($tool))
             ->response()
@@ -92,7 +95,8 @@ class ToolController extends Controller
         if ($tool->approval_status !== 'approved') {
             $user = $request->user('sanctum');
             $allowed = $user !== null && (
-                $user->role === 'owner' || (int) $user->id === (int) $tool->created_by
+                in_array($user->role, ['owner', 'pm'], true)
+                || (int) $user->id === (int) $tool->created_by
             );
             if (! $allowed) {
                 throw new NotFoundHttpException;
@@ -106,6 +110,10 @@ class ToolController extends Controller
 
     public function update(UpdateToolRequest $request, Tool $tool): ToolResource
     {
+        if (! $this->canManageTool($request->user(), $tool)) {
+            abort(403, 'You cannot edit this tool.');
+        }
+
         $data = $request->validated();
 
         $categoryIds = $data['category_ids'] ?? [];
@@ -121,8 +129,8 @@ class ToolController extends Controller
         }
 
         if (
-            $request->user()->role !== 'owner'
-            && $tool->approval_status === 'rejected'
+            $tool->approval_status === 'rejected'
+            && ! in_array($request->user()->role, ['owner', 'pm'], true)
         ) {
             $data['approval_status'] = 'pending';
         }
@@ -134,14 +142,35 @@ class ToolController extends Controller
         $tool->roles()->sync($roleIds);
 
         $tool->load(['creator:id,name,email', 'categories', 'tags', 'roles']);
+        AuditLogger::log($request->user(), 'tool.updated', $tool);
 
         return new ToolResource($tool);
     }
 
-    public function destroy(Tool $tool): Response
+    public function destroy(Request $request, Tool $tool): Response
     {
+        if (! $this->canManageTool($request->user(), $tool)) {
+            abort(403, 'You cannot delete this tool.');
+        }
+
+        AuditLogger::log($request->user(), 'tool.deleted', $tool, [
+            'tool_name' => $tool->name,
+        ]);
         $tool->delete();
 
         return response()->noContent();
+    }
+
+    private function canManageTool(?User $user, Tool $tool): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if (in_array($user->role, ['owner', 'pm'], true)) {
+            return true;
+        }
+
+        return (int) $user->id === (int) $tool->created_by;
     }
 }

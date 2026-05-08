@@ -18,7 +18,7 @@ class StartTwoFactorMethodRequest extends FormRequest
     {
         return [
             'pending_token' => ['required', 'string', 'size:64'],
-            'method' => ['required', 'string', 'in:email,telegram,totp'],
+            'method' => ['required', 'string', 'in:email,totp'],
         ];
     }
 }

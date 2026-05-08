@@ -18,7 +18,7 @@ class VerifyEmailTwoFactorRequest extends FormRequest
     {
         return [
             'pending_token' => ['required', 'string', 'size:64'],
-            'method' => ['required', 'string', 'in:email,telegram,totp'],
+            'method' => ['required', 'string', 'in:email,totp'],
             'code' => ['required', 'string', 'regex:/^[0-9]{6}$/'],
             'device_name' => ['sometimes', 'string', 'max:255'],
         ];

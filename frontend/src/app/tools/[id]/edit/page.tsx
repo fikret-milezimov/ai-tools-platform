@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { API_BASE } from "@/lib/api";
-import { getToken } from "@/lib/auth-storage";
+import { getStoredUser, getToken } from "@/lib/auth-storage";
 import type { Metadata, ToolDetail } from "@/lib/tools-types";
 import {
   authMultipartHeaders,
   buildToolFormData,
+  canManageTool,
   toggleId,
   unwrapApiData,
 } from "@/lib/tools-helpers";
@@ -51,8 +52,12 @@ function CheckboxRow({
 export default function EditToolPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const idParam = params.id;
   const toolId = typeof idParam === "string" ? idParam : idParam?.[0] ?? "";
+  const returnToParam = searchParams.get("returnTo");
+  const safeReturnTo =
+    returnToParam && returnToParam.startsWith("/") ? returnToParam : "/tools";
 
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(true);
@@ -74,6 +79,7 @@ export default function EditToolPage() {
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
 
   const loadMetadata = useCallback(async () => {
     setMetadataLoading(true);
@@ -113,6 +119,7 @@ export default function EditToolPage() {
     if (!toolId) return;
     setToolLoading(true);
     setToolError(null);
+    setCanEdit(false);
     try {
       const res = await fetch(`${API_BASE}/api/tools/${toolId}`, {
         headers: { Accept: "application/json" },
@@ -148,6 +155,8 @@ export default function EditToolPage() {
       setCategoryIds(tool.categories?.map((c) => c.id) ?? []);
       setTagIds(tool.tags?.map((t) => t.id) ?? []);
       setRoleIds(tool.roles?.map((r) => r.id) ?? []);
+      const u = getStoredUser();
+      setCanEdit(canManageTool(u?.role, u?.id, tool.created_by));
     } catch {
       setToolError("Network error while loading tool.");
     } finally {
@@ -175,6 +184,9 @@ export default function EditToolPage() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
+    if (!canEdit) {
+      return;
+    }
     if (!getToken()) {
       router.push("/login");
       return;
@@ -195,9 +207,11 @@ export default function EditToolPage() {
         role_ids: roleIds,
         screenshot: screenshotFile,
       });
+      // Laravel handles multipart updates reliably via method spoofing.
+      fd.append("_method", "PUT");
 
       const res = await fetch(`${API_BASE}/api/tools/${toolId}`, {
-        method: "PUT",
+        method: "POST",
         headers: authMultipartHeaders(),
         body: fd,
       });
@@ -228,7 +242,7 @@ export default function EditToolPage() {
       }
 
       flashToast("Tool updated successfully.", "success");
-      router.push("/tools");
+      router.push(safeReturnTo);
     } catch {
       setFormError("Network error.");
     } finally {
@@ -237,6 +251,7 @@ export default function EditToolPage() {
   }
 
   const metaBlocked = metadataLoading || Boolean(metadataError);
+  const fieldsDisabled = formLoading || metaBlocked || !canEdit;
 
   if (toolLoading) {
     return (
@@ -253,7 +268,7 @@ export default function EditToolPage() {
           {toolError}
         </p>
         <Link
-          href="/tools"
+          href={safeReturnTo}
           className="text-sm font-medium text-sky-700 hover:text-sky-900"
         >
           ← Back to list
@@ -266,16 +281,29 @@ export default function EditToolPage() {
     <div className="mx-auto max-w-2xl space-y-8">
       <div className="space-y-6">
         <Link
-          href="/tools"
+          href={safeReturnTo}
           className="text-sm font-medium text-sky-700 hover:text-sky-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
         >
           ← Back to tools
         </Link>
         <PageHeader
-          title="Edit tool"
-          description="Update fields and links to categories, tags, and roles. Replace the screenshot by uploading a new image."
+          title={canEdit ? "Edit tool" : "View tool"}
+          description={
+            canEdit
+              ? "Update fields and links to categories, tags, and roles. Replace the screenshot by uploading a new image."
+              : "You can view this entry but only the creator, owner, or product manager can make changes."
+          }
         />
       </div>
+
+      {!canEdit ? (
+        <p
+          role="status"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          Read-only: you are not the creator and do not have owner or PM access.
+        </p>
+      ) : null}
 
       {metadataLoading ? (
         <p className="text-sm text-gray-500">Loading form options…</p>
@@ -313,7 +341,7 @@ export default function EditToolPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            disabled={formLoading}
+            disabled={fieldsDisabled}
           />
 
           <Input
@@ -322,7 +350,7 @@ export default function EditToolPage() {
             value={link}
             onChange={(e) => setLink(e.target.value)}
             required
-            disabled={formLoading}
+            disabled={fieldsDisabled}
           />
 
           <Input
@@ -330,7 +358,7 @@ export default function EditToolPage() {
             name="documentation_url"
             value={documentationUrl}
             onChange={(e) => setDocumentationUrl(e.target.value)}
-            disabled={formLoading}
+            disabled={fieldsDisabled}
           />
 
           <Textarea
@@ -339,7 +367,7 @@ export default function EditToolPage() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             required
-            disabled={formLoading}
+            disabled={fieldsDisabled}
           />
 
           <Textarea
@@ -347,7 +375,7 @@ export default function EditToolPage() {
             name="how_to_use"
             value={howToUse}
             onChange={(e) => setHowToUse(e.target.value)}
-            disabled={formLoading}
+            disabled={fieldsDisabled}
           />
 
           <Textarea
@@ -355,7 +383,7 @@ export default function EditToolPage() {
             name="real_examples"
             value={realExamples}
             onChange={(e) => setRealExamples(e.target.value)}
-            disabled={formLoading}
+            disabled={fieldsDisabled}
             placeholder="One URL per line (or free text)"
           />
 
@@ -364,7 +392,7 @@ export default function EditToolPage() {
             name="image_url"
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
-            disabled={formLoading}
+            disabled={fieldsDisabled}
             hint="A newly uploaded file replaces this URL."
           />
 
@@ -386,7 +414,7 @@ export default function EditToolPage() {
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
-              disabled={formLoading}
+              disabled={fieldsDisabled}
               className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-sky-800 hover:file:bg-sky-100"
               onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
@@ -396,7 +424,7 @@ export default function EditToolPage() {
           </div>
 
           <fieldset
-            disabled={metaBlocked || formLoading}
+            disabled={fieldsDisabled}
             className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/50 p-4"
           >
             <legend className="px-1 text-sm font-semibold text-gray-900">
@@ -417,7 +445,7 @@ export default function EditToolPage() {
           </fieldset>
 
           <fieldset
-            disabled={metaBlocked || formLoading}
+            disabled={fieldsDisabled}
             className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/50 p-4"
           >
             <legend className="px-1 text-sm font-semibold text-gray-900">
@@ -437,7 +465,7 @@ export default function EditToolPage() {
 
           <div
             className={`rounded-xl border border-gray-200 bg-gray-50/50 p-4 ${
-              metaBlocked || formLoading ? "pointer-events-none opacity-50" : ""
+              fieldsDisabled ? "pointer-events-none opacity-50" : ""
             }`}
           >
             <RoleMultiSelect
@@ -445,25 +473,27 @@ export default function EditToolPage() {
               roles={metadata?.roles ?? []}
               value={roleIds}
               onChange={setRoleIds}
-              disabled={metaBlocked || formLoading}
+              disabled={fieldsDisabled}
             />
           </div>
 
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={formLoading || metaBlocked}
-            >
-              {formLoading ? "Saving…" : "Save changes"}
-            </Button>
-            <Link
-              href="/tools"
-              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 shadow-sm transition hover:bg-gray-50"
-            >
-              Cancel
-            </Link>
-          </div>
+          {canEdit ? (
+            <div className="flex flex-wrap gap-3 pt-2">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={formLoading || metaBlocked}
+              >
+                {formLoading ? "Saving…" : "Save changes"}
+              </Button>
+              <Link
+                href={safeReturnTo}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 shadow-sm transition hover:bg-gray-50"
+              >
+                Cancel
+              </Link>
+            </div>
+          ) : null}
         </form>
       </Card>
     </div>

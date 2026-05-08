@@ -32,7 +32,6 @@ class StartTwoFactorMethodController extends Controller
         $method = $request->validated('method');
         $message = match ($method) {
             'email' => 'Check your email for a verification code.',
-            'telegram' => 'Check your Telegram chat for a verification code.',
             'totp' => 'Open your authenticator app and enter the 6-digit code.',
             default => 'Continue with verification.',
         };

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import {
   FormEvent,
   useCallback,
@@ -12,7 +13,7 @@ import { API_BASE } from "@/lib/api";
 import { getToken, getStoredUser } from "@/lib/auth-storage";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { canAccessAddToolNav } from "@/lib/nav-config";
-import { authJsonHeaders } from "@/lib/tools-helpers";
+import { authJsonHeaders, canManageTool } from "@/lib/tools-helpers";
 import type { Metadata, Tool } from "@/lib/tools-types";
 import {
   consumeStoredToast,
@@ -53,8 +54,10 @@ function shortDescription(text: string, max = 120) {
 }
 
 export default function ToolsPage() {
+  const pathname = usePathname();
   const { showToast } = useToast();
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(true);
   const [metadataError, setMetadataError] = useState<string | null>(null);
@@ -80,6 +83,7 @@ export default function ToolsPage() {
   useEffect(() => {
     const u = getStoredUser();
     setUserRole(u?.role ?? null);
+    setCurrentUserId(u?.id ?? null);
   }, []);
 
   useEffect(() => {
@@ -213,6 +217,7 @@ export default function ToolsPage() {
   const filtersDisabled = metadataLoading;
   const showAddLink =
     userRole !== null && canAccessAddToolNav(userRole);
+  const returnTo = pathname;
 
   return (
     <div className="space-y-8 md:space-y-10">
@@ -375,7 +380,9 @@ export default function ToolsPage() {
 
       {!listLoading && tools.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {tools.map((t) => (
+          {tools.map((t) => {
+            const canEdit = canManageTool(userRole, currentUserId, t.created_by);
+            return (
             <Card
               key={t.id}
               hover
@@ -423,26 +430,38 @@ export default function ToolsPage() {
                 >
                   Open link
                 </a>
-                <Link
-                  href={`/tools/${t.id}/edit`}
-                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-                >
-                  Edit
-                </Link>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="min-h-[44px] flex-1 !border-red-200 !text-red-800 hover:!bg-red-50 focus-visible:!ring-red-600"
-                  disabled={deletingId === t.id || !getToken()}
-                  onClick={() =>
-                    setPendingDelete({ id: t.id, name: t.name })
-                  }
-                >
-                  {deletingId === t.id ? "…" : "Delete"}
-                </Button>
+                {canEdit ? (
+                  <>
+                    <Link
+                      href={`/tools/${t.id}/edit?returnTo=${encodeURIComponent(returnTo)}`}
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                    >
+                      Edit
+                    </Link>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="min-h-[44px] flex-1 !border-red-200 !text-red-800 hover:!bg-red-50 focus-visible:!ring-red-600"
+                      disabled={deletingId === t.id || !getToken()}
+                      onClick={() =>
+                        setPendingDelete({ id: t.id, name: t.name })
+                      }
+                    >
+                      {deletingId === t.id ? "…" : "Delete"}
+                    </Button>
+                  </>
+                ) : (
+                  <Link
+                    href={`/tools/${t.id}/edit?returnTo=${encodeURIComponent(returnTo)}`}
+                    className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                  >
+                    View details
+                  </Link>
+                )}
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       ) : null}
 

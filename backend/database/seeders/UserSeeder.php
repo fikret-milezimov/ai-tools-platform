@@ -30,16 +30,17 @@ class UserSeeder extends Seeder
                 'role' => 'owner',
                 'two_factor_email_enabled' => true,
                 'two_factor_totp_secret' => $demoTotpSecret,
-                'two_factor_telegram_chat_id' => env('TWO_FACTOR_DEMO_TELEGRAM_CHAT_ID'),
+                'two_factor_totp_enabled_at' => now(),
             ]
         );
 
         User::query()->updateOrCreate(
-            ['email' => 'elena@frontend.local'],
+            ['email' => 'fetata_89@abv.bg'],
             [
-                'name' => 'Elena Petrova',
+                'name' => 'Fikret Milezimov',
                 'password' => Hash::make('password'),
                 'role' => 'frontend',
+                'two_factor_email_enabled' => true,
             ]
         );
 
@@ -49,6 +50,7 @@ class UserSeeder extends Seeder
                 'name' => 'Petar Georgiev',
                 'password' => Hash::make('password'),
                 'role' => 'backend',
+                'two_factor_email_enabled' => true,
             ]
         );
     }

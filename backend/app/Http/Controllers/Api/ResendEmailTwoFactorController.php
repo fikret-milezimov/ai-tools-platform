@@ -30,7 +30,15 @@ class ResendEmailTwoFactorController extends Controller
 
         RateLimiter::hit($throttleKey, 60);
 
-        if (! $twoFactor->resend($token)) {
+        try {
+            $ok = $twoFactor->resend($token);
+        } catch (\RuntimeException $e) {
+            throw ValidationException::withMessages([
+                'pending_token' => [$e->getMessage()],
+            ]);
+        }
+
+        if (! $ok) {
             throw ValidationException::withMessages([
                 'pending_token' => ['This sign-in session has expired, or resend is not available for this method. Please sign in again.'],
             ]);

@@ -66,6 +66,21 @@ export function buildToolFormData(params: {
   return fd;
 }
 
+/** Creator, owner, and product manager may edit or delete a tool; others are read-only. */
+export function canManageTool(
+  role: string | null | undefined,
+  userId: number | null | undefined,
+  createdBy: number | null | undefined,
+): boolean {
+  if (role === "owner" || role === "pm") {
+    return true;
+  }
+  if (userId != null && createdBy != null && userId === createdBy) {
+    return true;
+  }
+  return false;
+}
+
 /** Laravel JsonResource often returns `{ data: { ... } }`. */
 export function unwrapApiData<T>(json: unknown): T | null {
   if (!json || typeof json !== "object") {

@@ -100,7 +100,7 @@ export default function LoginPage() {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       let data: unknown;
@@ -266,7 +266,7 @@ export default function LoginPage() {
 
   async function handleResend() {
     if (!pendingToken) return;
-    if (selectedMethod !== "email" && selectedMethod !== "telegram") return;
+    if (selectedMethod !== "email") return;
     setError(null);
     setResendHint(null);
     setResendLoading(true);
@@ -314,8 +314,7 @@ export default function LoginPage() {
     }
   }
 
-  const showResend =
-    selectedMethod === "email" || selectedMethod === "telegram";
+  const showResend = selectedMethod === "email";
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-md items-center justify-center px-4 py-12">
@@ -342,8 +341,10 @@ export default function LoginPage() {
               <Input
                 label="Email"
                 name="email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                inputMode="email"
+                autoComplete="username"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -375,7 +376,7 @@ export default function LoginPage() {
               Verify it’s you
             </h1>
             <p className="mb-6 text-center text-sm text-slate-600">
-              Choose how to receive your one-time code.
+              Choose email (one-time code) or your authenticator app.
             </p>
 
             {resendHint ? (
@@ -430,7 +431,6 @@ export default function LoginPage() {
                   Code sent to <strong>{email}</strong>.
                 </>
               )}
-              {selectedMethod === "telegram" && "Check your Telegram messages."}
               {selectedMethod === "totp" && "Use your authenticator app (6-digit code)."}
             </p>
 
