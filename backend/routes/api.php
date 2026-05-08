@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminToolController;
 use App\Http\Controllers\Api\AdminLogController;
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\CurrentUserController;
 use App\Http\Controllers\Api\LoginController;
 use App\Http\Controllers\Api\ResendEmailTwoFactorController;
@@ -39,6 +40,11 @@ Route::middleware(['auth:sanctum', 'role:owner,pm'])->prefix('admin')->group(fun
     Route::get('/logs', [AdminLogController::class, 'index']);
     Route::post('/tools/{tool}/approve', [AdminToolController::class, 'approve']);
     Route::post('/tools/{tool}/reject', [AdminToolController::class, 'reject']);
+});
+
+Route::middleware(['auth:sanctum', 'role:owner'])->prefix('admin')->group(function () {
+    Route::get('/users', [AdminUserController::class, 'index']);
+    Route::post('/users', [AdminUserController::class, 'store']);
 });
 
 Route::get('/tool-metadata', ToolMetadataController::class);

@@ -114,9 +114,10 @@ function roleActionCards(role: string) {
         subtitle="Review pending tools, approve or reject submissions."
         icon={<IconGrid />}
       />
-      <ComingSoonCard
+      <ActionCard
+        href="/admin/tools"
         title="Manage users"
-        subtitle="Organization settings — coming soon."
+        subtitle="Create and review user accounts."
         icon={<IconUsers />}
       />
       <ActionCard

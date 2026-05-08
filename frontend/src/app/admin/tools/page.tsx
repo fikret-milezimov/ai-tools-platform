@@ -65,6 +65,24 @@ export default function AdminToolsPage() {
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
+  const [users, setUsers] = useState<
+    { id: number; name: string; email: string; role: string; created_at?: string | null }[]
+  >([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [usersPagination, setUsersPagination] = useState<PaginationMeta>({
+    current_page: 1,
+    per_page: 10,
+    total: 0,
+    last_page: 1,
+    from: null,
+    to: null,
+  });
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserRole, setNewUserRole] = useState("backend");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserSubmitting, setNewUserSubmitting] = useState(false);
 
   type ToolsResponse = {
     tools?: Tool[];
@@ -76,6 +94,12 @@ export default function AdminToolsPage() {
     logs?: AuditLogRow[];
     pagination?: PaginationMeta;
     filters?: { actions?: string[] };
+  };
+  type UsersResponse = {
+    users?: { id: number; name: string; email: string; role: string; created_at?: string | null }[];
+    pagination?: PaginationMeta;
+    message?: string;
+    errors?: Record<string, string[]>;
   };
 
   const [filterStatus, setFilterStatus] = useState<"" | ApprovalStatus>("");
@@ -107,6 +131,7 @@ export default function AdminToolsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelOpen = isLg || filtersOpen;
   const returnTo = pathname;
+  const currentUserRole = getStoredUser()?.role ?? null;
 
   useEffect(() => {
     const u = getStoredUser();
@@ -257,9 +282,91 @@ export default function AdminToolsPage() {
     void fetchLogs(1);
   }, [fetchLogs]);
 
+  const fetchUsers = useCallback(async (page = 1) => {
+    if (currentUserRole !== "owner" || !getToken()) {
+      return;
+    }
+    setUsersLoading(true);
+    setUsersError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("per_page", "10");
+      const res = await fetch(`${API_BASE}/api/admin/users?${params.toString()}`, {
+        headers: authJsonHeaders(),
+      });
+      const raw = (await res.json().catch(() => null)) as UsersResponse | null;
+      if (!res.ok) {
+        setUsersError(raw?.message ?? `Failed to load users (${res.status}).`);
+        setUsers([]);
+        return;
+      }
+      setUsers(Array.isArray(raw?.users) ? raw.users : []);
+      if (raw?.pagination) {
+        setUsersPagination(raw.pagination);
+      }
+    } catch {
+      setUsersError("Network error while loading users.");
+      setUsers([]);
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [currentUserRole]);
+
+  useEffect(() => {
+    if (currentUserRole === "owner") {
+      void fetchUsers(1);
+    }
+  }, [currentUserRole, fetchUsers]);
+
   async function handleFilters(e: FormEvent) {
     e.preventDefault();
     await fetchTools(1);
+  }
+
+  async function submitUser(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (currentUserRole !== "owner") {
+      return;
+    }
+    if (!getToken()) {
+      router.push("/login");
+      return;
+    }
+
+    setNewUserSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users`, {
+        method: "POST",
+        headers: authJsonHeaders(),
+        body: JSON.stringify({
+          name: newUserName.trim(),
+          email: newUserEmail.trim(),
+          role: newUserRole,
+          password: newUserPassword,
+        }),
+      });
+      const raw = (await res.json().catch(() => null)) as UsersResponse | null;
+      if (!res.ok) {
+        const fieldErrors = raw?.errors
+          ? Object.entries(raw.errors)
+              .map(([k, v]) => `${k}: ${v.join(", ")}`)
+              .join("; ")
+          : "";
+        showToast(fieldErrors || raw?.message || `Could not add user (${res.status}).`, "error");
+        return;
+      }
+      showToast("User added successfully.", "success");
+      setNewUserName("");
+      setNewUserEmail("");
+      setNewUserRole("backend");
+      setNewUserPassword("");
+      await fetchUsers(1);
+    } catch {
+      showToast("Network error while adding user.", "error");
+    } finally {
+      setNewUserSubmitting(false);
+    }
   }
 
   async function approveTool(id: number) {
@@ -322,6 +429,135 @@ export default function AdminToolsPage() {
 
   return (
     <div className="space-y-8">
+      <div className="space-y-4">
+        <PageHeader
+          title="Admin — users"
+          description="Create and review user accounts."
+        />
+        {currentUserRole !== "owner" ? (
+          <Card className="text-sm text-slate-600">
+            Owner access only.
+          </Card>
+        ) : (
+          <>
+            <Card className="space-y-4">
+              <h3 className="text-base font-semibold text-slate-900">Add user</h3>
+              <form onSubmit={submitUser} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Input
+                  label="Name"
+                  name="name"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
+                  required
+                  disabled={newUserSubmitting}
+                />
+                <Input
+                  label="Email"
+                  name="email"
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  required
+                  disabled={newUserSubmitting}
+                />
+                <SelectField
+                  label="Role"
+                  name="role"
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value)}
+                  disabled={newUserSubmitting}
+                >
+                  <option value="backend">backend</option>
+                  <option value="frontend">frontend</option>
+                  <option value="designer">designer</option>
+                  <option value="qa">qa</option>
+                  <option value="pm">pm</option>
+                  <option value="owner">owner</option>
+                </SelectField>
+                <Input
+                  label="Password"
+                  name="password"
+                  type="password"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  required
+                  disabled={newUserSubmitting}
+                />
+                <div className="md:col-span-2">
+                  <Button type="submit" variant="primary" disabled={newUserSubmitting}>
+                    {newUserSubmitting ? "Adding…" : "Add user"}
+                  </Button>
+                </div>
+              </form>
+            </Card>
+
+            <Card className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-base font-semibold text-slate-900">Users</h3>
+                <p className="text-xs text-slate-500">
+                  Showing {usersPagination.from ?? 0}-{usersPagination.to ?? 0} of {usersPagination.total}
+                </p>
+              </div>
+
+              {usersError ? (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{usersError}</p>
+              ) : null}
+
+              {usersLoading && users.length === 0 ? (
+                <p className="text-sm text-slate-600">Loading users…</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      <tr>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Role</th>
+                        <th className="px-3 py-2">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {users.map((u) => (
+                        <tr key={u.id} className="bg-white">
+                          <td className="px-3 py-2 text-slate-900">{u.name}</td>
+                          <td className="px-3 py-2 text-slate-700">{u.email}</td>
+                          <td className="px-3 py-2 capitalize text-slate-700">{u.role}</td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {u.created_at ? new Date(u.created_at).toLocaleString() : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={usersLoading || usersPagination.current_page <= 1}
+                  onClick={() => void fetchUsers(usersPagination.current_page - 1)}
+                >
+                  Prev
+                </Button>
+                <span className="text-sm text-slate-600">
+                  Page {usersPagination.current_page} / {usersPagination.last_page}
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={usersLoading || usersPagination.current_page >= usersPagination.last_page}
+                  onClick={() => void fetchUsers(usersPagination.current_page + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </Card>
+          </>
+        )}
+      </div>
+
       <PageHeader
         title="Admin — tools"
         description="Review submissions and manage approval status. Public catalog only lists approved tools."
