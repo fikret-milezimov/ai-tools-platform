@@ -1,139 +1,326 @@
 # Full-stack starter kit
 
-Monorepo with a **Laravel 12** JSON API and a **Next.js 15** (React 19, TypeScript) frontend. It includes authentication (Laravel Sanctum), role-based access, a tools catalog with admin approval, ratings and comments, audit logging, and optional 2FA from the user profile.
+Production-style monorepo containing a **Laravel 12** JSON API backend and a **Next.js 15** frontend (React 19 + TypeScript). The platform includes authentication with Laravel Sanctum, role-based access control, AI tools management, admin approval workflows, ratings and comments, audit logging, and optional 2FA support.
+
+## Project overview
+
+This project simulates an internal company platform where teams can discover, review, and manage AI tools in a centralized environment.
+
+Different roles such as owners, project managers, backend developers, frontend developers, QA engineers, and designers can collaborate through a shared tools catalog with moderation and access control.
 
 ## Tech stack
 
-| Layer | Technology |
-|--------|------------|
-| Frontend | Next.js, React, TypeScript, Tailwind CSS |
-| Backend | Laravel, PHP 8.2, Nginx |
-| Database | MySQL 8 |
-| Cache / session | Redis 7 |
+| Layer           | Technology                                     |
+| --------------- | ---------------------------------------------- |
+| Frontend        | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| Backend         | Laravel 12, PHP 8.2, Nginx                     |
+| Database        | MySQL 8                                        |
+| Cache / Session | Redis 7                                        |
+| Authentication  | Laravel Sanctum                                |
+| Containers      | Docker Compose                                 |
 
-## Prerequisites
+---
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2
-- Ports **8200–8205** free on your machine (or change mappings in `docker-compose.yml` and adjust the frontend API base — see below)
+# Prerequisites
 
-## Quick start (Docker)
+Before starting, make sure you have:
 
-1. **Clone the repository** and enter the project root.
+* [Docker](https://docs.docker.com/get-docker/)
+* Docker Compose v2
+* Ports **8200–8205** available on your machine
 
-2. **Backend environment file**  
-   If `backend/.env` does not exist, create it from the example:
-   ```bash
-   cp backend/.env.example backend/.env
-   ```
-   For Docker, the `php_fpm` service injects MySQL/Redis and `APP_URL`; your local `backend/.env` should still define `APP_KEY` after the first run (see `start.sh`).
+If you change the exposed ports in `docker-compose.yml`, update the frontend API base URL accordingly.
 
-3. **Start everything**
-   ```bash
-   chmod +x start.sh stop.sh laravel-setup.sh db-manage.sh
-   ./start.sh
-   ```
-   This builds the PHP image, starts containers, and when needed runs `key:generate`, `composer install`, `migrate`, and basic permission fixes.
+---
 
-4. **Seed demo data (recommended for first run)**
-   ```bash
-   docker compose exec php_fpm php artisan db:seed
-   ```
-   Demo users, roles, categories, tags, and sample tools are defined in `backend/database/seeders/`. User emails and roles are in `UserSeeder.php`; the seeded password is **`password`** (change in production).
+# Quick start (Docker)
 
-5. **Public URLs for uploaded tool screenshots**
-   ```bash
-   docker compose exec php_fpm php artisan storage:link
-   ```
-
-6. **Open the apps**
-   - Frontend: [http://localhost:8200](http://localhost:8200)
-   - Backend (Nginx): [http://localhost:8201](http://localhost:8201)
-   - API health: [http://localhost:8201/api/status](http://localhost:8201/api/status)
-
-7. **Stop**
-   ```bash
-   ./stop.sh
-   ```
-   or `docker compose down` (add `-v` only if you intend to wipe MySQL/Redis volumes).
-
-### Optional: full Laravel setup script
-
-After containers are up, for a clean Composer install, migrate, optional seed, and cache clears (interactive seed prompt):
+## 1. Clone the repository
 
 ```bash
-./laravel-setup.sh
+git clone <repository-url>
+cd <project-name>
 ```
 
-## Ports and services
+---
 
-| Host port | Service | Notes |
-|-----------|---------|--------|
-| 8200 | Next.js | Mapped to container port 3000 |
-| 8201 | Nginx + Laravel | API under `/api` |
-| 8202 | PHP-FPM | Exposed for debugging |
-| 8203 | MySQL | `root` / DB name from compose |
-| 8204 | Redis | Password set in compose |
-| 8205 | Tools (Alpine) | Idle helper container |
+## 2. Create backend environment file
 
-Default DB name: `vibecode-full-stack-starter-kit_app`. Credentials match `docker-compose.yml` (also referenced in `db-manage.sh`).
-
-## Configuration
-
-- **Root `.env`** (optional): `PROJECT_NAME`, `FRONTEND_PORT`, `BACKEND_PORT`, etc. The running stack primarily uses **`docker-compose.yml`** for ports and `php_fpm` environment variables.
-- **Frontend API base**: `frontend/src/lib/api.ts` sets `API_BASE` (default `http://localhost:8201`). If you change the host port for Nginx, update this file or refactor to use `process.env.NEXT_PUBLIC_API_URL` to match `docker-compose.yml`.
-- **Backend**: See `backend/.env.example` for Laravel variables. Email 2FA and mail settings are documented there.
-
-## Useful commands
+If `backend/.env` does not exist:
 
 ```bash
-# Logs
+cp backend/.env.example backend/.env
+```
+
+---
+
+## 3. Start the application
+
+```bash
+chmod +x start.sh stop.sh laravel-setup.sh db-manage.sh
+./start.sh
+```
+
+The startup script automatically:
+
+* builds the PHP image
+* starts all containers
+* installs Composer dependencies (if needed)
+* generates the Laravel app key
+* runs migrations
+* applies permission fixes
+
+---
+
+## 4. Seed demo data
+
+```bash
+docker compose exec php_fpm php artisan db:seed
+```
+
+The project includes demo:
+
+* users
+* roles
+* categories
+* tags
+* sample AI tools
+
+Default seeded password:
+
+```txt
+password
+```
+
+Seeders are located in:
+
+```txt
+backend/database/seeders/
+```
+
+---
+
+## 5. Create public storage link
+
+```bash
+docker compose exec php_fpm php artisan storage:link
+```
+
+Required for uploaded tool screenshots.
+
+---
+
+## 6. Open the application
+
+| Service    | URL                              |
+| ---------- | -------------------------------- |
+| Frontend   | http://localhost:8200            |
+| Backend    | http://localhost:8201            |
+| API Status | http://localhost:8201/api/status |
+
+---
+
+## 7. Stop the containers
+
+```bash
+./stop.sh
+```
+
+or:
+
+```bash
+docker compose down
+```
+
+Use `-v` only if you want to remove MySQL and Redis volumes.
+
+---
+
+# Available services
+
+| Host Port | Service                |
+| --------- | ---------------------- |
+| 8200      | Next.js frontend       |
+| 8201      | Nginx + Laravel API    |
+| 8202      | PHP-FPM                |
+| 8203      | MySQL                  |
+| 8204      | Redis                  |
+| 8205      | Helper tools container |
+
+---
+
+# Project structure
+
+```txt
+├── frontend/          # Next.js frontend application
+├── backend/           # Laravel API backend
+├── nginx/             # Nginx configuration
+├── docker/            # PHP image and configuration
+├── mysql/init/        # MySQL initialization scripts
+├── docker-compose.yml
+├── start.sh
+├── stop.sh
+└── laravel-setup.sh
+```
+
+---
+
+# Core features
+
+## Authentication & Security
+
+* Laravel Sanctum authentication
+* Role-based access control
+* Optional 2FA support
+* Inactive users blocked from protected routes
+* Token revocation on admin deactivation
+
+## AI Tools Management
+
+* Create, edit, and delete AI tools
+* Categories and tags support
+* Role-specific recommendations
+* Screenshot uploads
+* Public approved tools catalog
+
+## Admin Features
+
+* Pending tools approval workflow
+* User management
+* Audit logging
+* Search and filtering
+
+## Community Feedback
+
+* Ratings system
+* Comments and moderation
+* Audit events for ratings and comments
+
+---
+
+# Configuration
+
+## Frontend API base URL
+
+The frontend API configuration is located in:
+
+```txt
+frontend/src/lib/api.ts
+```
+
+Default API URL:
+
+```txt
+http://localhost:8201
+```
+
+If backend ports change, update this value accordingly.
+
+---
+
+## Backend configuration
+
+Laravel environment variables are defined in:
+
+```txt
+backend/.env.example
+```
+
+This includes:
+
+* database settings
+* Redis configuration
+* mail configuration
+* 2FA settings
+* application URLs
+
+---
+
+# Useful commands
+
+## Logs
+
+```bash
 docker compose logs -f frontend
 docker compose logs -f backend
 docker compose logs -f php_fpm
+```
 
-# Laravel (inside stack)
+## Laravel commands
+
+```bash
 docker compose exec php_fpm php artisan migrate
 docker compose exec php_fpm php artisan db:seed
 docker compose exec php_fpm php artisan test
+```
 
-# Frontend (inside stack)
+## Frontend commands
+
+```bash
 docker compose exec frontend npm run lint
 docker compose exec frontend npm run build
+```
 
-# Database helper
+## Database helper
+
+```bash
 ./db-manage.sh connect
 ./db-manage.sh backup
 ```
 
-## Project layout
+---
 
+# Troubleshooting
+
+## Port already in use
+
+Update the host ports in:
+
+```txt
+docker-compose.yml
 ```
-├── frontend/          # Next.js app (src/app, components, lib)
-├── backend/           # Laravel API (routes/api.php, app/, database/)
-├── nginx/             # Nginx config for Laravel
-├── docker/            # PHP image, php.ini, supervisor
-├── mysql/init/        # MySQL init scripts
-├── docker-compose.yml
-├── start.sh / stop.sh
-└── laravel-setup.sh
+
+and update the frontend API URL if necessary.
+
+---
+
+## Images not loading
+
+Run:
+
+```bash
+docker compose exec php_fpm php artisan storage:link
 ```
 
-## Features (high level)
+Also verify that:
 
-- **Auth**: Login API, Sanctum tokens, inactive users blocked from authenticated routes; tokens revoked on admin deactivation.
-- **Roles**: e.g. `owner`, `pm`, `backend`, `frontend` — tool edit/delete limited to creator, owners, and PMs; others get read-only views.
-- **Tools**: CRUD, categories/tags/roles, optional screenshot (stored under `storage/app/public`); public catalog lists approved tools.
-- **Admin**: Pending approvals, audit logs, user management (owners), filters with debounced search.
-- **Feedback**: Ratings and comments with moderation rules; audit events for ratings and comments.
-- **Security**: Optional email/TOTP 2FA from profile (not forced on new users in seed).
+* `APP_URL` matches the backend URL
+* uploaded files exist in `storage/app/public`
 
-## Troubleshooting
+---
 
-- **Port already in use**: Change host ports in `docker-compose.yml` and `frontend/src/lib/api.ts` (or env) consistently.
-- **Migrations fail on fresh DB**: Ensure MySQL is healthy (`docker compose ps`), then `docker compose exec php_fpm php artisan migrate`.
-- **Images 404 for tools**: Run `php artisan storage:link` in `php_fpm` and confirm `APP_URL` matches how the browser reaches the API.
-- **Config changes ignored**: In local dev, avoid stale config cache: `docker compose exec php_fpm php artisan config:clear`.
+## Laravel config changes not applied
 
-## License
+Clear the configuration cache:
 
-Add your license here if the project is published.
+```bash
+docker compose exec php_fpm php artisan config:clear
+```
+
+---
+
+## Database migration issues
+
+Check container health:
+
+```bash
+docker compose ps
+```
+
+Then rerun migrations:
+
+```bash
+docker compose exec php_fpm php artisan migrate
+```
+
+
