@@ -13,7 +13,12 @@ import { API_BASE } from "@/lib/api";
 import { getToken, getStoredUser } from "@/lib/auth-storage";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { canAccessAddToolNav } from "@/lib/nav-config";
-import { authJsonHeaders, canManageTool, resolveImageUrl } from "@/lib/tools-helpers";
+import {
+  authJsonHeaders,
+  canManageTool,
+  TOOL_IMAGE_PLACEHOLDER,
+  toolDisplayImageSrc,
+} from "@/lib/tools-helpers";
 import type { Metadata, Tool } from "@/lib/tools-types";
 import {
   consumeStoredToast,
@@ -60,17 +65,6 @@ function formatAverageRating(value: number | null | undefined): string {
   const rounded = Math.round(value * 10) / 10;
   return `${rounded.toFixed(1).replace(/\.0$/, "")} / 5`;
 }
-
-const CARD_IMAGE_FALLBACK =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 240">
-      <rect width="640" height="240" fill="#f1f5f9"/>
-      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="20" font-family="Arial, sans-serif">
-        No image
-      </text>
-    </svg>`,
-  );
 
 export default function ToolsPage() {
   const pathname = usePathname();
@@ -401,7 +395,7 @@ export default function ToolsPage() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {tools.map((t) => {
             const canEdit = canManageTool(userRole, currentUserId, t.created_by);
-            const imageSrc = resolveImageUrl(t.image_url ?? null);
+            const imageSrc = toolDisplayImageSrc(t.image_url ?? null);
             return (
             <Card
               key={t.id}
@@ -411,14 +405,14 @@ export default function ToolsPage() {
               <div className="-mx-6 -mt-6 mb-4 overflow-hidden rounded-t-xl border-b border-slate-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={imageSrc ?? CARD_IMAGE_FALLBACK}
+                  src={imageSrc}
                   alt={`Screenshot: ${t.name}`}
                   className="h-36 w-full object-cover"
                   loading="lazy"
                   decoding="async"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
-                    e.currentTarget.src = CARD_IMAGE_FALLBACK;
+                    e.currentTarget.src = TOOL_IMAGE_PLACEHOLDER;
                   }}
                 />
               </div>

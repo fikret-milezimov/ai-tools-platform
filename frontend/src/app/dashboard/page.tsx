@@ -347,6 +347,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-10">
       <PageHeader
+        align="center"
         title={`Welcome, ${user.name}`}
         description="Your dashboard surfaces shortcuts that match your role. Use the header navigation to move between sections."
       />

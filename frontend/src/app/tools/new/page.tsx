@@ -9,6 +9,7 @@ import type { Metadata } from "@/lib/tools-types";
 import {
   authMultipartHeaders,
   buildToolFormData,
+  TOOL_IMAGE_PLACEHOLDER,
   toggleId,
 } from "@/lib/tools-helpers";
 import { flashToast } from "@/components/ToastProvider";
@@ -63,6 +64,7 @@ export default function NewToolPage() {
   const [tagIds, setTagIds] = useState<number[]>([]);
   const [roleIds, setRoleIds] = useState<number[]>([]);
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [screenshotPreviewUrl, setScreenshotPreviewUrl] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
@@ -107,6 +109,18 @@ export default function NewToolPage() {
     }
     void loadMetadata();
   }, [loadMetadata, router]);
+
+  useEffect(() => {
+    if (!screenshotFile) {
+      setScreenshotPreviewUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(screenshotFile);
+    setScreenshotPreviewUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [screenshotFile]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -274,6 +288,19 @@ export default function NewToolPage() {
             disabled={formLoading}
             placeholder="One URL per line (or free text with links)"
           />
+
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={screenshotPreviewUrl ?? TOOL_IMAGE_PLACEHOLDER}
+              alt=""
+              className="max-h-48 w-full object-contain bg-gray-50"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = TOOL_IMAGE_PLACEHOLDER;
+              }}
+            />
+          </div>
 
           <div className="space-y-1.5">
             <span className="block text-sm font-medium text-gray-800">

@@ -28,21 +28,21 @@ Route::post('/login/2fa/start', StartTwoFactorMethodController::class)->middlewa
 Route::post('/login/verify-2fa', VerifyEmailTwoFactorController::class)->middleware('throttle:20,1');
 Route::post('/login/resend-2fa', ResendEmailTwoFactorController::class)->middleware('throttle:12,1');
 
-Route::get('/user', CurrentUserController::class)->middleware('auth:sanctum');
-Route::get('/settings/security', [SecuritySettingsController::class, 'show'])->middleware('auth:sanctum');
-Route::post('/settings/security/email/toggle', [SecuritySettingsController::class, 'toggleEmail'])->middleware('auth:sanctum');
-Route::post('/settings/security/totp/setup-start', [SecuritySettingsController::class, 'startTotpSetup'])->middleware('auth:sanctum');
-Route::post('/settings/security/totp/setup-confirm', [SecuritySettingsController::class, 'confirmTotpSetup'])->middleware('auth:sanctum');
-Route::post('/settings/security/totp/disable', [SecuritySettingsController::class, 'disableTotp'])->middleware('auth:sanctum');
+Route::get('/user', CurrentUserController::class)->middleware(['auth:sanctum', 'active']);
+Route::get('/settings/security', [SecuritySettingsController::class, 'show'])->middleware(['auth:sanctum', 'active']);
+Route::post('/settings/security/email/toggle', [SecuritySettingsController::class, 'toggleEmail'])->middleware(['auth:sanctum', 'active']);
+Route::post('/settings/security/totp/setup-start', [SecuritySettingsController::class, 'startTotpSetup'])->middleware(['auth:sanctum', 'active']);
+Route::post('/settings/security/totp/setup-confirm', [SecuritySettingsController::class, 'confirmTotpSetup'])->middleware(['auth:sanctum', 'active']);
+Route::post('/settings/security/totp/disable', [SecuritySettingsController::class, 'disableTotp'])->middleware(['auth:sanctum', 'active']);
 
-Route::middleware(['auth:sanctum', 'role:owner,pm'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'active', 'role:owner,pm'])->prefix('admin')->group(function () {
     Route::get('/tools', [AdminToolController::class, 'index']);
     Route::get('/logs', [AdminLogController::class, 'index']);
     Route::post('/tools/{tool}/approve', [AdminToolController::class, 'approve']);
     Route::post('/tools/{tool}/reject', [AdminToolController::class, 'reject']);
 });
 
-Route::middleware(['auth:sanctum', 'role:owner'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'active', 'role:owner'])->prefix('admin')->group(function () {
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::post('/users', [AdminUserController::class, 'store']);
     Route::put('/users/{user}/role', [AdminUserController::class, 'updateRole']);
@@ -55,10 +55,10 @@ Route::get('/tools', [ToolController::class, 'index']);
 Route::get('/tools/{tool}', [ToolController::class, 'show']);
 Route::get('/tool-image', [ToolImageController::class, 'show']);
 Route::get('/tools/{tool}/feedback', [ToolFeedbackController::class, 'index']);
-Route::post('/tools', [ToolController::class, 'store'])->middleware('auth:sanctum');
-Route::put('/tools/{tool}', [ToolController::class, 'update'])->middleware('auth:sanctum');
-Route::delete('/tools/{tool}', [ToolController::class, 'destroy'])->middleware('auth:sanctum');
-Route::put('/tools/{tool}/rating', [ToolFeedbackController::class, 'upsertRating'])->middleware('auth:sanctum');
-Route::post('/tools/{tool}/comments', [ToolFeedbackController::class, 'addComment'])->middleware('auth:sanctum');
-Route::put('/comments/{comment}', [ToolCommentController::class, 'update'])->middleware('auth:sanctum');
-Route::delete('/comments/{comment}', [ToolCommentController::class, 'destroy'])->middleware('auth:sanctum');
+Route::post('/tools', [ToolController::class, 'store'])->middleware(['auth:sanctum', 'active']);
+Route::put('/tools/{tool}', [ToolController::class, 'update'])->middleware(['auth:sanctum', 'active']);
+Route::delete('/tools/{tool}', [ToolController::class, 'destroy'])->middleware(['auth:sanctum', 'active']);
+Route::put('/tools/{tool}/rating', [ToolFeedbackController::class, 'upsertRating'])->middleware(['auth:sanctum', 'active']);
+Route::post('/tools/{tool}/comments', [ToolFeedbackController::class, 'addComment'])->middleware(['auth:sanctum', 'active']);
+Route::put('/comments/{comment}', [ToolCommentController::class, 'update'])->middleware(['auth:sanctum', 'active']);
+Route::delete('/comments/{comment}', [ToolCommentController::class, 'destroy'])->middleware(['auth:sanctum', 'active']);

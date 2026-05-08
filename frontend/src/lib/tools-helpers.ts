@@ -109,3 +109,10 @@ export function resolveImageUrl(url: string | null | undefined): string | null {
   }
   return `${API_BASE}/storage/${url}`;
 }
+
+/** Served from `public/images/` — default card preview when a tool has no screenshot. */
+export const TOOL_IMAGE_PLACEHOLDER = "/images/tool-placeholder.svg";
+
+export function toolDisplayImageSrc(url: string | null | undefined): string {
+  return resolveImageUrl(url) ?? TOOL_IMAGE_PLACEHOLDER;
+}

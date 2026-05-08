@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { API_BASE } from "@/lib/api";
 import { getStoredUser, getToken } from "@/lib/auth-storage";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { authJsonHeaders, unwrapApiData } from "@/lib/tools-helpers";
 import type { ApprovalStatus, AuditLogRow, Metadata, PaginationMeta, Tool } from "@/lib/tools-types";
@@ -53,12 +54,20 @@ function formatLogTarget(row: AuditLogRow): string {
   }
 
   const meta = row.meta ?? {};
+  const toolName = typeof meta.tool_name === "string" ? meta.tool_name : null;
   const targetEmail = typeof meta.target_user_email === "string" ? meta.target_user_email : null;
+  const createdEmail = typeof meta.created_user_email === "string" ? meta.created_user_email : null;
   const targetUserId =
     typeof meta.target_user_id === "number"
       ? meta.target_user_id
       : typeof meta.target_user_id === "string" && meta.target_user_id.trim() !== ""
         ? Number(meta.target_user_id)
+        : null;
+  const createdUserId =
+    typeof meta.created_user_id === "number"
+      ? meta.created_user_id
+      : typeof meta.created_user_id === "string" && meta.created_user_id.trim() !== ""
+        ? Number(meta.created_user_id)
         : null;
 
   if (targetEmail && targetUserId && Number.isFinite(targetUserId)) {
@@ -69,6 +78,18 @@ function formatLogTarget(row: AuditLogRow): string {
   }
   if (targetUserId && Number.isFinite(targetUserId)) {
     return `User #${targetUserId}`;
+  }
+  if (createdEmail && createdUserId && Number.isFinite(createdUserId)) {
+    return `${createdEmail} (#${createdUserId})`;
+  }
+  if (createdEmail) {
+    return createdEmail;
+  }
+  if (createdUserId && Number.isFinite(createdUserId)) {
+    return `User #${createdUserId}`;
+  }
+  if (toolName) {
+    return toolName;
   }
 
   return "—";
@@ -159,6 +180,14 @@ export default function AdminToolsPage() {
   const [filterLogTo, setFilterLogTo] = useState("");
   const [filterLogSearch, setFilterLogSearch] = useState("");
 
+  const debouncedFilterSearch = useDebouncedValue(filterSearch, 350);
+  const debouncedFilterLogSearch = useDebouncedValue(filterLogSearch, 350);
+  const debouncedFilterUserSearch = useDebouncedValue(filterUserSearch, 350);
+
+  const toolsFetchGen = useRef(0);
+  const logsFetchGen = useRef(0);
+  const usersFetchGen = useRef(0);
+
   const isLg = useMediaQuery("(min-width: 1024px)");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelOpen = isLg || filtersOpen;
@@ -195,65 +224,72 @@ export default function AdminToolsPage() {
     }
   }, []);
 
-  const fetchTools = useCallback(async (page = 1) => {
-    if (!getToken()) return;
-    setListLoading(true);
-    setListError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("per_page", "10");
-      if (filterStatus) params.set("approval_status", filterStatus);
-      if (filterCategoryId) params.set("category_id", filterCategoryId);
-      if (filterRoleId) params.set("role_id", filterRoleId);
-      const q = filterSearch.trim();
-      if (q) params.set("search", q);
+  const fetchTools = useCallback(
+    async (page = 1, signal?: AbortSignal) => {
+      if (!getToken()) return;
+      const gen = ++toolsFetchGen.current;
+      setListLoading(true);
+      setListError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(page));
+        params.set("per_page", "10");
+        if (filterStatus) params.set("approval_status", filterStatus);
+        if (filterCategoryId) params.set("category_id", filterCategoryId);
+        if (filterRoleId) params.set("role_id", filterRoleId);
+        const q = debouncedFilterSearch.trim();
+        if (q) params.set("search", q);
 
-      const qs = params.toString();
-      const res = await fetch(
-        `${API_BASE}/api/admin/tools${qs ? `?${qs}` : ""}`,
-        { headers: authJsonHeaders() },
-      );
-      const raw = (await res.json().catch(() => null)) as ToolsResponse | null;
-      if (!res.ok) {
-        const msg =
-          (raw as { message?: string } | null)?.message ??
-          `Failed to load (${res.status})`;
-        setListError(typeof msg === "string" ? msg : "Failed to load tools.");
+        const qs = params.toString();
+        const res = await fetch(`${API_BASE}/api/admin/tools${qs ? `?${qs}` : ""}`, {
+          headers: authJsonHeaders(),
+          signal,
+        });
+        const raw = (await res.json().catch(() => null)) as ToolsResponse | null;
+        if (gen !== toolsFetchGen.current) return;
+        if (!res.ok) {
+          const msg =
+            (raw as { message?: string } | null)?.message ??
+            `Failed to load (${res.status})`;
+          setListError(typeof msg === "string" ? msg : "Failed to load tools.");
+          setTools([]);
+          return;
+        }
+        const list =
+          Array.isArray(raw?.tools) ? raw.tools : Array.isArray(raw?.data) ? raw.data : [];
+        const unwrapped = unwrapApiData<Tool[]>(list);
+        setTools(Array.isArray(unwrapped) ? unwrapped : []);
+        if (raw?.pagination) {
+          setToolsPagination(raw.pagination);
+        }
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (gen !== toolsFetchGen.current) return;
+        setListError("Network error.");
         setTools([]);
-        return;
+      } finally {
+        if (gen === toolsFetchGen.current) {
+          setListLoading(false);
+        }
       }
-      const list =
-        Array.isArray(raw?.tools) ? raw.tools : Array.isArray(raw?.data) ? raw.data : [];
-      const unwrapped = unwrapApiData<Tool[]>(list);
-      setTools(Array.isArray(unwrapped) ? unwrapped : []);
-      if (raw?.pagination) {
-        setToolsPagination(raw.pagination);
-      }
-    } catch {
-      setListError("Network error.");
-      setTools([]);
-    } finally {
-      setListLoading(false);
-    }
-  }, [
-    filterCategoryId,
-    filterRoleId,
-    filterSearch,
-    filterStatus,
-  ]);
+    },
+    [debouncedFilterSearch, filterCategoryId, filterRoleId, filterStatus],
+  );
 
   useEffect(() => {
     void loadMetadata();
   }, [loadMetadata]);
 
   useEffect(() => {
-    void fetchTools();
+    const ac = new AbortController();
+    void fetchTools(1, ac.signal);
+    return () => ac.abort();
   }, [fetchTools]);
 
   const fetchLogs = useCallback(
-    async (page = 1) => {
+    async (page = 1, signal?: AbortSignal) => {
       if (!getToken()) return;
+      const gen = ++logsFetchGen.current;
       setLogsLoading(true);
       setLogsError(null);
 
@@ -266,14 +302,15 @@ export default function AdminToolsPage() {
         if (filterLogToolId) params.set("tool_id", filterLogToolId);
         if (filterLogFrom) params.set("from", filterLogFrom);
         if (filterLogTo) params.set("to", filterLogTo);
-        const q = filterLogSearch.trim();
+        const q = debouncedFilterLogSearch.trim();
         if (q) params.set("search", q);
 
-        const res = await fetch(
-          `${API_BASE}/api/admin/logs?${params.toString()}`,
-          { headers: authJsonHeaders() },
-        );
+        const res = await fetch(`${API_BASE}/api/admin/logs?${params.toString()}`, {
+          headers: authJsonHeaders(),
+          signal,
+        });
         const raw = (await res.json().catch(() => null)) as LogsResponse | null;
+        if (gen !== logsFetchGen.current) return;
         if (!res.ok || !raw) {
           const message =
             (raw as { message?: string } | null)?.message ??
@@ -292,17 +329,21 @@ export default function AdminToolsPage() {
         if (raw.pagination) {
           setLogsPagination(raw.pagination);
         }
-      } catch {
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (gen !== logsFetchGen.current) return;
         setLogsError("Network error while loading admin logs.");
         setLogs([]);
       } finally {
-        setLogsLoading(false);
+        if (gen === logsFetchGen.current) {
+          setLogsLoading(false);
+        }
       }
     },
     [
+      debouncedFilterLogSearch,
       filterLogAction,
       filterLogFrom,
-      filterLogSearch,
       filterLogTo,
       filterLogToolId,
       filterLogUserId,
@@ -313,52 +354,65 @@ export default function AdminToolsPage() {
     const u = getStoredUser();
     if (!getToken() || !u) return;
     if (u.role !== "owner" && u.role !== "pm") return;
-    void fetchLogs(1);
+    const ac = new AbortController();
+    void fetchLogs(1, ac.signal);
+    return () => ac.abort();
   }, [fetchLogs]);
 
-  const fetchUsers = useCallback(async (page = 1) => {
-    if (currentUserRole !== "owner" || !getToken()) {
-      return;
-    }
-    setUsersLoading(true);
-    setUsersError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("per_page", "10");
-      if (filterUserRole) params.set("role", filterUserRole);
-      const userQuery = filterUserSearch.trim();
-      if (userQuery) params.set("search", userQuery);
-      const res = await fetch(`${API_BASE}/api/admin/users?${params.toString()}`, {
-        headers: authJsonHeaders(),
-      });
-      const raw = (await res.json().catch(() => null)) as UsersResponse | null;
-      if (!res.ok) {
-        setUsersError(raw?.message ?? `Failed to load users (${res.status}).`);
-        setUsers([]);
+  const fetchUsers = useCallback(
+    async (page = 1, signal?: AbortSignal) => {
+      if (currentUserRole !== "owner" || !getToken()) {
         return;
       }
-      setUsers(Array.isArray(raw?.users) ? raw.users : []);
-      const drafts: Record<number, string> = {};
-      for (const user of Array.isArray(raw?.users) ? raw.users : []) {
-        drafts[user.id] = user.role;
+      const gen = ++usersFetchGen.current;
+      setUsersLoading(true);
+      setUsersError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(page));
+        params.set("per_page", "10");
+        if (filterUserRole) params.set("role", filterUserRole);
+        const userQuery = debouncedFilterUserSearch.trim();
+        if (userQuery) params.set("search", userQuery);
+        const res = await fetch(`${API_BASE}/api/admin/users?${params.toString()}`, {
+          headers: authJsonHeaders(),
+          signal,
+        });
+        const raw = (await res.json().catch(() => null)) as UsersResponse | null;
+        if (gen !== usersFetchGen.current) return;
+        if (!res.ok) {
+          setUsersError(raw?.message ?? `Failed to load users (${res.status}).`);
+          setUsers([]);
+          return;
+        }
+        setUsers(Array.isArray(raw?.users) ? raw.users : []);
+        const drafts: Record<number, string> = {};
+        for (const user of Array.isArray(raw?.users) ? raw.users : []) {
+          drafts[user.id] = user.role;
+        }
+        setRoleDraftByUserId(drafts);
+        if (raw?.pagination) {
+          setUsersPagination(raw.pagination);
+        }
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (gen !== usersFetchGen.current) return;
+        setUsersError("Network error while loading users.");
+        setUsers([]);
+      } finally {
+        if (gen === usersFetchGen.current) {
+          setUsersLoading(false);
+        }
       }
-      setRoleDraftByUserId(drafts);
-      if (raw?.pagination) {
-        setUsersPagination(raw.pagination);
-      }
-    } catch {
-      setUsersError("Network error while loading users.");
-      setUsers([]);
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [currentUserRole, filterUserRole, filterUserSearch]);
+    },
+    [currentUserRole, debouncedFilterUserSearch, filterUserRole],
+  );
 
   useEffect(() => {
-    if (currentUserRole === "owner") {
-      void fetchUsers(1);
-    }
+    if (currentUserRole !== "owner") return;
+    const ac = new AbortController();
+    void fetchUsers(1, ac.signal);
+    return () => ac.abort();
   }, [currentUserRole, fetchUsers]);
 
   async function submitUser(e: FormEvent<HTMLFormElement>) {
@@ -740,14 +794,6 @@ export default function AdminToolsPage() {
       <PageHeader
         title="Admin — tools"
         description="Review submissions and manage approval status. Public catalog only lists approved tools."
-        actions={
-          <Link
-            href="/tools"
-            className="text-sm font-medium text-sky-700 hover:text-sky-900"
-          >
-            ← Public catalog
-          </Link>
-        }
       />
 
       <Card className="space-y-4">

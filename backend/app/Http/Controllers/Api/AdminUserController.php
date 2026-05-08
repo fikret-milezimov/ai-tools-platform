@@ -122,8 +122,13 @@ class AdminUserController extends Controller
             ]);
         }
 
-        if ($oldRole === 'owner' && $newRole !== 'owner' && $this->ownersCount() <= 1) {
-            abort(422, 'At least one owner must remain active.');
+        if (
+            $oldRole === 'owner'
+            && $newRole !== 'owner'
+            && $user->is_active
+            && $this->activeOwnersCount() <= 1
+        ) {
+            abort(422, 'At least one active owner must remain.');
         }
 
         $user->update([
@@ -183,6 +188,10 @@ class AdminUserController extends Controller
             'is_active' => $newStatus,
         ]);
 
+        if (! $newStatus) {
+            $user->tokens()->delete();
+        }
+
         AuditLogger::log(
             $actor,
             'user.status.updated',
@@ -201,11 +210,6 @@ class AdminUserController extends Controller
                 'is_active' => (bool) $user->is_active,
             ],
         ]);
-    }
-
-    private function ownersCount(): int
-    {
-        return User::query()->where('role', 'owner')->count();
     }
 
     private function activeOwnersCount(): int

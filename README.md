@@ -1,185 +1,139 @@
-# vibecode-full-stack-starter-kit - Full-Stack Development Environment
+# Full-stack starter kit
 
-Generated on: Thu Sep  4 01:37:12 PM EEST 2025
-Location: /home/softart/scripts/vibecode-full-stack-starter-kit
+Monorepo with a **Laravel 12** JSON API and a **Next.js 15** (React 19, TypeScript) frontend. It includes authentication (Laravel Sanctum), role-based access, a tools catalog with admin approval, ratings and comments, audit logging, and optional 2FA from the user profile.
 
-## 🚀 Tech Stack
+## Tech stack
 
-- **Frontend**: Next.js + React + TypeScript (Port 8200)
-- **Backend**: Laravel + PHP 8.2 + Nginx (Port 8201)  
-- **Database**: MySQL 8.0 (Port 8203)
-- **Cache**: Redis 7 (Port 8204)
-- **Development Tools**: Alpine container (Port 8205)
+| Layer | Technology |
+|--------|------------|
+| Frontend | Next.js, React, TypeScript, Tailwind CSS |
+| Backend | Laravel, PHP 8.2, Nginx |
+| Database | MySQL 8 |
+| Cache / session | Redis 7 |
 
-## 📋 Quick Start
+## Prerequisites
 
-1. **Start the environment:**
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2
+- Ports **8200–8205** free on your machine (or change mappings in `docker-compose.yml` and adjust the frontend API base — see below)
+
+## Quick start (Docker)
+
+1. **Clone the repository** and enter the project root.
+
+2. **Backend environment file**  
+   If `backend/.env` does not exist, create it from the example:
    ```bash
+   cp backend/.env.example backend/.env
+   ```
+   For Docker, the `php_fpm` service injects MySQL/Redis and `APP_URL`; your local `backend/.env` should still define `APP_KEY` after the first run (see `start.sh`).
+
+3. **Start everything**
+   ```bash
+   chmod +x start.sh stop.sh laravel-setup.sh db-manage.sh
    ./start.sh
    ```
+   This builds the PHP image, starts containers, and when needed runs `key:generate`, `composer install`, `migrate`, and basic permission fixes.
 
-2. **Access your applications:**
-   - Frontend: http://localhost:8200
-   - Backend: http://localhost:8201
-   - API Status: http://localhost:8201/api/status
+4. **Seed demo data (recommended for first run)**
+   ```bash
+   docker compose exec php_fpm php artisan db:seed
+   ```
+   Demo users, roles, categories, tags, and sample tools are defined in `backend/database/seeders/`. User emails and roles are in `UserSeeder.php`; the seeded password is **`password`** (change in production).
 
-3. **Stop the environment:**
+5. **Public URLs for uploaded tool screenshots**
+   ```bash
+   docker compose exec php_fpm php artisan storage:link
+   ```
+
+6. **Open the apps**
+   - Frontend: [http://localhost:8200](http://localhost:8200)
+   - Backend (Nginx): [http://localhost:8201](http://localhost:8201)
+   - API health: [http://localhost:8201/api/status](http://localhost:8201/api/status)
+
+7. **Stop**
    ```bash
    ./stop.sh
    ```
+   or `docker compose down` (add `-v` only if you intend to wipe MySQL/Redis volumes).
 
-## 🔧 Management Scripts
+### Optional: full Laravel setup script
 
-- `./start.sh` - Start all services with auto-setup
-- `./stop.sh` - Stop all services
-- `./laravel-setup.sh` - Full Laravel initialization
-- `./db-manage.sh` - Database management utilities
+After containers are up, for a clean Composer install, migrate, optional seed, and cache clears (interactive seed prompt):
 
-## 📁 Project Structure
-
-```
-vibecode-full-stack-starter-kit/
-├── frontend/             # Next.js application
-│   ├── src/             # Source code
-│   ├── public/          # Static assets
-│   ├── package.json     # Frontend dependencies
-│   └── next.config.js   # Next.js configuration
-├── backend/             # Laravel application
-│   ├── app/             # Application code
-│   ├── public/          # Web root
-│   ├── routes/          # API routes
-│   ├── database/        # Migrations, seeders
-│   ├── .env            # Laravel configuration
-│   └── composer.json    # Backend dependencies
-├── nginx/              # Nginx configuration
-├── docker/             # Docker configurations
-├── mysql/init/         # Database initialization
-├── tools/              # Development utilities
-├── docker-compose.yml  # Container orchestration
-└── README.md          # This documentation
-```
-
-## 🐳 Docker Services
-
-All services are isolated with unique names: `vibecode-full-stack-starter-kit_*`
-
-- **frontend** - Next.js development server
-- **backend** - Nginx reverse proxy
-- **php_fpm** - PHP-FPM for Laravel
-- **mysql** - MySQL 8.0 database
-- **redis** - Redis cache server
-- **tools** - Development utilities container
-
-## 💻 Development Commands
-
-### Frontend Development
 ```bash
-# Access frontend container
-docker compose exec frontend sh
-
-# Install packages
-docker compose exec frontend npm install package-name
-
-# View frontend logs
-docker compose logs frontend -f
+./laravel-setup.sh
 ```
 
-### Backend Development
-```bash
-# Access PHP container
-docker compose exec php_fpm sh
+## Ports and services
 
-# Laravel Artisan commands
-docker compose exec php_fpm php artisan --version
+| Host port | Service | Notes |
+|-----------|---------|--------|
+| 8200 | Next.js | Mapped to container port 3000 |
+| 8201 | Nginx + Laravel | API under `/api` |
+| 8202 | PHP-FPM | Exposed for debugging |
+| 8203 | MySQL | `root` / DB name from compose |
+| 8204 | Redis | Password set in compose |
+| 8205 | Tools (Alpine) | Idle helper container |
+
+Default DB name: `vibecode-full-stack-starter-kit_app`. Credentials match `docker-compose.yml` (also referenced in `db-manage.sh`).
+
+## Configuration
+
+- **Root `.env`** (optional): `PROJECT_NAME`, `FRONTEND_PORT`, `BACKEND_PORT`, etc. The running stack primarily uses **`docker-compose.yml`** for ports and `php_fpm` environment variables.
+- **Frontend API base**: `frontend/src/lib/api.ts` sets `API_BASE` (default `http://localhost:8201`). If you change the host port for Nginx, update this file or refactor to use `process.env.NEXT_PUBLIC_API_URL` to match `docker-compose.yml`.
+- **Backend**: See `backend/.env.example` for Laravel variables. Email 2FA and mail settings are documented there.
+
+## Useful commands
+
+```bash
+# Logs
+docker compose logs -f frontend
+docker compose logs -f backend
+docker compose logs -f php_fpm
+
+# Laravel (inside stack)
 docker compose exec php_fpm php artisan migrate
-docker compose exec php_fpm php artisan make:controller UserController
-docker compose exec php_fpm php artisan make:model Product -m
+docker compose exec php_fpm php artisan db:seed
+docker compose exec php_fpm php artisan test
 
-# Composer commands
-docker compose exec php_fpm composer install
-docker compose exec php_fpm composer require laravel/sanctum
+# Frontend (inside stack)
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run build
 
-# View backend logs
-docker compose logs backend -f
-docker compose logs php_fpm -f
-```
-
-### Database Operations
-```bash
-# Connect to MySQL
+# Database helper
 ./db-manage.sh connect
-
-# Create backup
 ./db-manage.sh backup
-
-# Connect to Redis
-./db-manage.sh redis
-
-# Direct MySQL access
-docker compose exec mysql mysql -u root -pvibecode-full-stack-starter-kit_mysql_pass vibecode-full-stack-starter-kit_app
 ```
 
-## 🔐 Database Configuration
+## Project layout
 
-**MySQL Credentials:**
-- Host: mysql (internal) / localhost:8203 (external)
-- Database: vibecode-full-stack-starter-kit_app
-- Username: root
-- Password: vibecode-full-stack-starter-kit_mysql_pass
-
-**Redis Configuration:**
-- Host: redis (internal) / localhost:8204 (external)  
-- Password: vibecode-full-stack-starter-kit_redis_pass
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-1. **Port conflicts:**
-   - Check if ports 8200-8205 are available
-   - Use `netstat -tulpn | grep :PORT` to check port usage
-
-2. **Permission issues:**
-   - Run `./laravel-setup.sh` to fix Laravel permissions
-
-3. **Services not starting:**
-   - Check Docker is running: `docker ps`
-   - View logs: `docker compose logs`
-
-### Useful Commands
-
-```bash
-# Check service status
-docker compose ps
-
-# View all logs
-docker compose logs -f
-
-# Restart specific service
-docker compose restart frontend
-docker compose restart backend
-
-# Rebuild services
-docker compose up -d --build
-
-# Clean up (removes containers and volumes)
-docker compose down -v
+```
+├── frontend/          # Next.js app (src/app, components, lib)
+├── backend/           # Laravel API (routes/api.php, app/, database/)
+├── nginx/             # Nginx config for Laravel
+├── docker/            # PHP image, php.ini, supervisor
+├── mysql/init/        # MySQL init scripts
+├── docker-compose.yml
+├── start.sh / stop.sh
+└── laravel-setup.sh
 ```
 
-## 📊 Monitoring
+## Features (high level)
 
-- **Service Status**: `docker compose ps`
-- **Resource Usage**: `docker stats`
-- **Logs**: `docker compose logs -f [service_name]`
+- **Auth**: Login API, Sanctum tokens, inactive users blocked from authenticated routes; tokens revoked on admin deactivation.
+- **Roles**: e.g. `owner`, `pm`, `backend`, `frontend` — tool edit/delete limited to creator, owners, and PMs; others get read-only views.
+- **Tools**: CRUD, categories/tags/roles, optional screenshot (stored under `storage/app/public`); public catalog lists approved tools.
+- **Admin**: Pending approvals, audit logs, user management (owners), filters with debounced search.
+- **Feedback**: Ratings and comments with moderation rules; audit events for ratings and comments.
+- **Security**: Optional email/TOTP 2FA from profile (not forced on new users in seed).
 
-## 🔄 Updates
+## Troubleshooting
 
-To update the environment:
-1. Pull latest images: `docker compose pull`
-2. Rebuild services: `docker compose up -d --build`
+- **Port already in use**: Change host ports in `docker-compose.yml` and `frontend/src/lib/api.ts` (or env) consistently.
+- **Migrations fail on fresh DB**: Ensure MySQL is healthy (`docker compose ps`), then `docker compose exec php_fpm php artisan migrate`.
+- **Images 404 for tools**: Run `php artisan storage:link` in `php_fpm` and confirm `APP_URL` matches how the browser reaches the API.
+- **Config changes ignored**: In local dev, avoid stale config cache: `docker compose exec php_fpm php artisan config:clear`.
 
----
+## License
 
-**Generated with create-fullstack-env.sh**  
-**Project ID**: vibecode-full-stack-starter-kit  
-**Created**: Thu Sep  4 01:37:12 PM EEST 2025
+Add your license here if the project is published.

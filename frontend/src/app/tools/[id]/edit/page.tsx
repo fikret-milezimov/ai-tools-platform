@@ -17,7 +17,8 @@ import {
   authMultipartHeaders,
   buildToolFormData,
   canManageTool,
-  resolveImageUrl,
+  TOOL_IMAGE_PLACEHOLDER,
+  toolDisplayImageSrc,
   toggleId,
   unwrapApiData,
 } from "@/lib/tools-helpers";
@@ -644,16 +645,18 @@ export default function EditToolPage() {
             placeholder="One URL per line (or free text)"
           />
 
-          {(screenshotPreviewUrl || imageUrl.trim()) ? (
-            <div className="overflow-hidden rounded-lg border border-gray-200">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={screenshotPreviewUrl ?? resolveImageUrl(imageUrl) ?? imageUrl}
-                alt=""
-                className="max-h-48 w-full object-contain bg-gray-50"
-              />
-            </div>
-          ) : null}
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={screenshotPreviewUrl ?? toolDisplayImageSrc(imageUrl)}
+              alt=""
+              className="max-h-48 w-full object-contain bg-gray-50"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = TOOL_IMAGE_PLACEHOLDER;
+              }}
+            />
+          </div>
 
           <div className="space-y-1.5">
             <span className="block text-sm font-medium text-gray-800">

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240" viewBox="0 0 640 240" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="tp-bg" x1="0" y1="0" x2="640" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#e2e8f0"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="240" fill="url(#tp-bg)"/>
+  <g opacity="0.55" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <rect x="248" y="56" width="144" height="104" rx="10"/>
+    <path d="M248 88h144"/>
+    <circle cx="320" cy="120" r="18"/>
+    <path d="M302 168h36"/>
+    <path d="M320 150v18"/>
+  </g>
+  <text x="320" y="200" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="500">No screenshot</text>
+</svg>
