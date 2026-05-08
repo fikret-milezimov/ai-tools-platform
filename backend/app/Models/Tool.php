@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Tool extends Model
 {
@@ -38,5 +39,15 @@ class Tool extends Model
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class);
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(ToolComment::class);
+    }
+
+    public function ratings(): HasMany
+    {
+        return $this->hasMany(ToolRating::class);
     }
 }

@@ -1,4 +1,5 @@
 import { getToken } from "@/lib/auth-storage";
+import { API_BASE } from "@/lib/api";
 
 export function toggleId(ids: number[], id: number): number[] {
   return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
@@ -91,4 +92,20 @@ export function unwrapApiData<T>(json: unknown): T | null {
     return o.data as T;
   }
   return json as T;
+}
+
+export function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) {
+    return url;
+  }
+  if (url.startsWith("/")) {
+    return `${API_BASE}${url}`;
+  }
+  if (url.startsWith("storage/")) {
+    return `${API_BASE}/${url}`;
+  }
+  return `${API_BASE}/storage/${url}`;
 }

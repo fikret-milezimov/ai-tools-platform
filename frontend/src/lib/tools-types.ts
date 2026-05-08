@@ -14,6 +14,8 @@ export type Tool = {
   created_by?: number;
   creator?: { id: number; name: string; email: string };
   approval_status?: ApprovalStatus;
+  comments_count?: number | null;
+  average_rating?: number | null;
   categories?: { id: number; name: string }[];
   tags?: { id: number; name: string }[];
   roles?: { id: number; slug: string; name: string }[];
@@ -50,4 +52,17 @@ export type PaginationMeta = {
   last_page: number;
   from: number | null;
   to: number | null;
+};
+
+export type ToolFeedbackComment = {
+  id: number;
+  body: string;
+  created_at?: string | null;
+  user?: { id: number; name: string; email: string; role: string } | null;
+};
+
+export type ToolFeedbackSummary = {
+  average_rating: number | null;
+  ratings_count: number;
+  my_rating: number | null;
 };

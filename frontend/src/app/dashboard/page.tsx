@@ -3,12 +3,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { API_BASE } from "@/lib/api";
 import {
   getStoredUser,
   type AuthUser,
 } from "@/lib/auth-storage";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/Card";
+import type { Tool } from "@/lib/tools-types";
 
 function ActionCard({
   href,
@@ -252,6 +254,9 @@ function roleActionCards(role: string) {
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [recentTools, setRecentTools] = useState<Tool[]>([]);
+  const [mostRatedTools, setMostRatedTools] = useState<Tool[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
 
   useEffect(() => {
     const u = getStoredUser();
@@ -261,6 +266,80 @@ export default function DashboardPage() {
     }
     setUser(u);
   }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: number | null = null;
+
+    async function loadDashboardTools(showLoader = false) {
+      if (showLoader) {
+        setRecentLoading(true);
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/tools`, {
+          headers: { Accept: "application/json" },
+        });
+        const raw = (await res.json().catch(() => null)) as { data?: Tool[] } | null;
+        if (!cancelled && res.ok && Array.isArray(raw?.data)) {
+          const allTools = raw.data;
+          setRecentTools(allTools.slice(0, 3));
+          const topRated = [...allTools]
+            .filter((t) => (t.average_rating ?? 0) > 0)
+            .sort((a, b) => {
+              const ratingDiff = (b.average_rating ?? 0) - (a.average_rating ?? 0);
+              if (ratingDiff !== 0) return ratingDiff;
+              return (b.comments_count ?? 0) - (a.comments_count ?? 0);
+            })
+            .slice(0, 3);
+          setMostRatedTools(topRated);
+        } else if (!cancelled) {
+          setRecentTools([]);
+          setMostRatedTools([]);
+        }
+      } catch {
+        if (!cancelled) {
+          setRecentTools([]);
+          setMostRatedTools([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setRecentLoading(false);
+        }
+      }
+    }
+
+    function handleWindowFocus() {
+      void loadDashboardTools();
+    }
+
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        void loadDashboardTools();
+      }
+    }
+
+    function handleDashboardToolsChanged() {
+      void loadDashboardTools();
+    }
+
+    void loadDashboardTools(true);
+    intervalId = window.setInterval(() => {
+      void loadDashboardTools();
+    }, 10000);
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("dashboard-tools-changed", handleDashboardToolsChanged);
+
+    return () => {
+      cancelled = true;
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("dashboard-tools-changed", handleDashboardToolsChanged);
+    };
+  }, []);
 
   if (!user) {
     return (
@@ -278,13 +357,13 @@ export default function DashboardPage() {
       />
 
       <Card className="border-slate-100 shadow-sm">
-        <p className="text-sm font-medium text-slate-500">Signed in as</p>
-        <p className="mt-1 text-lg font-semibold text-slate-900">{user.email}</p>
-        <p className="mt-3">
+        <div className="flex flex-wrap items-center justify-center gap-2 text-center">
+          <span className="text-sm font-medium text-slate-500">Signed in as</span>
+          <span className="text-base font-semibold text-slate-900">{user.email}</span>
           <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium capitalize text-slate-800 ring-1 ring-slate-200/80">
             Role: {user.role}
           </span>
-        </p>
+        </div>
       </Card>
 
       <section aria-labelledby="quick-actions-heading">
@@ -297,6 +376,79 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {roleActionCards(user.role)}
         </div>
+      </section>
+
+      <section aria-labelledby="recent-tools-heading">
+        <h2
+          id="recent-tools-heading"
+          className="mb-4 text-lg font-semibold text-slate-900"
+        >
+          Latest tools
+        </h2>
+        {recentLoading ? (
+          <p className="text-sm text-slate-600">Loading latest tools…</p>
+        ) : recentTools.length === 0 ? (
+          <Card className="border-slate-100 text-sm text-slate-600 shadow-sm">
+            No tools yet.
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {recentTools.map((tool) => (
+              <Card key={tool.id} className="border-slate-100 shadow-sm">
+                <p className="text-base font-semibold text-slate-900">{tool.name}</p>
+                <p className="mt-2 line-clamp-3 text-sm text-slate-600">
+                  {tool.description}
+                </p>
+                <div className="mt-4">
+                  <Link
+                    href={`/tools/${tool.id}/edit?mode=view&returnTo=/dashboard`}
+                    className="text-sm font-medium text-sky-700 hover:text-sky-900"
+                  >
+                    View details
+                  </Link>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="most-rated-tools-heading">
+        <h2
+          id="most-rated-tools-heading"
+          className="mb-4 text-lg font-semibold text-slate-900"
+        >
+          Most rated
+        </h2>
+        {recentLoading ? (
+          <p className="text-sm text-slate-600">Loading most rated tools…</p>
+        ) : mostRatedTools.length === 0 ? (
+          <Card className="border-slate-100 text-sm text-slate-600 shadow-sm">
+            No ratings yet.
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {mostRatedTools.map((tool) => (
+              <Card key={tool.id} className="border-slate-100 shadow-sm">
+                <p className="text-base font-semibold text-slate-900">{tool.name}</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Rating: {(tool.average_rating ?? 0).toFixed(1).replace(/\.0$/, "")} / 5
+                </p>
+                <p className="text-xs text-slate-500">
+                  Reviews: {tool.comments_count ?? 0}
+                </p>
+                <div className="mt-4">
+                  <Link
+                    href={`/tools/${tool.id}/edit?mode=view&returnTo=/dashboard`}
+                    className="text-sm font-medium text-sky-700 hover:text-sky-900"
+                  >
+                    View details
+                  </Link>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

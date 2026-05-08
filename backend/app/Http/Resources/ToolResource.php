@@ -20,7 +20,7 @@ class ToolResource extends JsonResource
             'description' => $this->description,
             'how_to_use' => $this->how_to_use,
             'real_examples' => $this->real_examples,
-            'image_url' => $this->image_url,
+            'image_url' => $this->normalizeImageUrl($request, $this->image_url),
             'created_by' => $this->created_by,
             'creator' => $this->whenLoaded('creator', function () {
                 return [
@@ -52,8 +52,47 @@ class ToolResource extends JsonResource
                 ])->values()
             ),
             'approval_status' => $this->approval_status,
+            'comments_count' => isset($this->comments_count) ? (int) $this->comments_count : null,
+            'average_rating' => isset($this->ratings_avg_rating) ? round((float) $this->ratings_avg_rating, 2) : null,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    private function normalizeImageUrl(Request $request, ?string $url): ?string
+    {
+        if ($url === null || trim($url) === '') {
+            return null;
+        }
+
+        if (str_starts_with($url, 'data:')) {
+            return $url;
+        }
+
+        $appUrl = config('app.url');
+        $base = is_string($appUrl) && trim($appUrl) !== ''
+            ? rtrim($appUrl, '/')
+            : rtrim($request->getSchemeAndHttpHost(), '/');
+        $path = $url;
+        if (preg_match('/^https?:\/\//i', $url) === 1) {
+            $parsedPath = parse_url($url, PHP_URL_PATH);
+            if (! is_string($parsedPath) || $parsedPath === '') {
+                return $url;
+            }
+            $path = $parsedPath;
+        }
+
+        $path = ltrim($path, '/');
+        if (str_starts_with($path, 'storage/')) {
+            $path = substr($path, strlen('storage/'));
+        }
+        if (str_starts_with($path, 'api/tool-images/')) {
+            $path = substr($path, strlen('api/tool-images/'));
+        }
+        if ($path === '') {
+            return null;
+        }
+
+        return $base.'/api/tool-image?path='.rawurlencode($path);
     }
 }

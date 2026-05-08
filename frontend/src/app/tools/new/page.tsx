@@ -59,7 +59,6 @@ export default function NewToolPage() {
   const [description, setDescription] = useState("");
   const [howToUse, setHowToUse] = useState("");
   const [realExamples, setRealExamples] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
   const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [tagIds, setTagIds] = useState<number[]>([]);
   const [roleIds, setRoleIds] = useState<number[]>([]);
@@ -126,7 +125,7 @@ export default function NewToolPage() {
         description,
         how_to_use: howToUse,
         real_examples: realExamples,
-        image_url: imageUrl,
+        image_url: "",
         category_ids: categoryIds,
         tag_ids: tagIds,
         role_ids: roleIds,
@@ -168,6 +167,7 @@ export default function NewToolPage() {
         "Tool submitted. It will appear in the catalog after an admin approves it.",
         "success",
       );
+      window.dispatchEvent(new CustomEvent("dashboard-tools-changed"));
       router.push("/tools");
     } catch {
       setFormError("Network error.");
@@ -189,7 +189,7 @@ export default function NewToolPage() {
         </Link>
         <PageHeader
           title="Add a tool"
-          description="Fill in the details and attach categories, tags, and roles. Upload an optional screenshot or link example URLs."
+          description="Fill in the details and attach categories, tags, and roles. Upload an optional screenshot."
         />
       </div>
 
@@ -275,15 +275,6 @@ export default function NewToolPage() {
             placeholder="One URL per line (or free text with links)"
           />
 
-          <Input
-            label="Image URL (optional)"
-            name="image_url"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            disabled={formLoading}
-            hint="If you upload a file below, it takes precedence over this field."
-          />
-
           <div className="space-y-1.5">
             <span className="block text-sm font-medium text-gray-800">
               Screenshot (upload)
@@ -298,11 +289,6 @@ export default function NewToolPage() {
                 setScreenshotFile(f);
               }}
             />
-            <p className="text-xs text-gray-500">
-              JPEG, PNG, WebP, or GIF, up to ~4 MB. Run{" "}
-              <code className="rounded bg-gray-100 px-1">php artisan storage:link</code>{" "}
-              on the server so public URLs work.
-            </p>
           </div>
 
           <fieldset

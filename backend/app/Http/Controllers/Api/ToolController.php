@@ -23,6 +23,8 @@ class ToolController extends Controller
         $query = Tool::query()
             ->where('approval_status', 'approved')
             ->with(['creator:id,name,email', 'categories', 'tags', 'roles'])
+            ->withCount('comments')
+            ->withAvg('ratings', 'rating')
             ->latest();
 
         $nameSearch = $request->filled('search')

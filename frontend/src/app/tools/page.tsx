@@ -13,7 +13,7 @@ import { API_BASE } from "@/lib/api";
 import { getToken, getStoredUser } from "@/lib/auth-storage";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { canAccessAddToolNav } from "@/lib/nav-config";
-import { authJsonHeaders, canManageTool } from "@/lib/tools-helpers";
+import { authJsonHeaders, canManageTool, resolveImageUrl } from "@/lib/tools-helpers";
 import type { Metadata, Tool } from "@/lib/tools-types";
 import {
   consumeStoredToast,
@@ -52,6 +52,25 @@ function shortDescription(text: string, max = 120) {
   if (t.length <= max) return t;
   return `${t.slice(0, max).trim()}…`;
 }
+
+function formatAverageRating(value: number | null | undefined): string {
+  if (value == null) {
+    return "No ratings";
+  }
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded.toFixed(1).replace(/\.0$/, "")} / 5`;
+}
+
+const CARD_IMAGE_FALLBACK =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 240">
+      <rect width="640" height="240" fill="#f1f5f9"/>
+      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="20" font-family="Arial, sans-serif">
+        No image
+      </text>
+    </svg>`,
+  );
 
 export default function ToolsPage() {
   const pathname = usePathname();
@@ -382,26 +401,52 @@ export default function ToolsPage() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {tools.map((t) => {
             const canEdit = canManageTool(userRole, currentUserId, t.created_by);
+            const imageSrc = resolveImageUrl(t.image_url ?? null);
             return (
             <Card
               key={t.id}
               hover
               className="flex flex-col border-slate-100 shadow-md"
             >
-              {t.image_url ? (
-                <div className="-mx-6 -mt-6 mb-4 overflow-hidden rounded-t-xl border-b border-slate-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={t.image_url}
-                    alt={`Screenshot: ${t.name}`}
-                    className="h-36 w-full object-cover"
-                  />
-                </div>
-              ) : null}
+              <div className="-mx-6 -mt-6 mb-4 overflow-hidden rounded-t-xl border-b border-slate-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageSrc ?? CARD_IMAGE_FALLBACK}
+                  alt={`Screenshot: ${t.name}`}
+                  className="h-36 w-full object-cover"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = CARD_IMAGE_FALLBACK;
+                  }}
+                />
+              </div>
               <h3 className="text-lg font-bold text-slate-900">{t.name}</h3>
               <p className="mt-2 line-clamp-3 flex-1 text-sm leading-relaxed text-slate-600">
                 {shortDescription(t.description)}
               </p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                <Link
+                  href={`/tools/${t.id}/edit?mode=view&returnTo=${encodeURIComponent(returnTo)}#feedback`}
+                  className="text-sky-700 hover:text-sky-900"
+                >
+                  Rating:{" "}
+                  <strong className="text-slate-800">
+                    {formatAverageRating(t.average_rating)}
+                  </strong>
+                </Link>
+                <Link
+                  href={`/tools/${t.id}/edit?mode=view&returnTo=${encodeURIComponent(returnTo)}#feedback`}
+                  className="text-sky-700 hover:text-sky-900"
+                >
+                  Comments:{" "}
+                  <strong className="text-slate-800">
+                    {t.comments_count ?? 0}
+                  </strong>
+                </Link>
+              </div>
 
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {t.categories?.map((c) => (
@@ -428,10 +473,16 @@ export default function ToolsPage() {
                   rel="noreferrer"
                   className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
                 >
-                  Open link
+                  Open
                 </a>
                 {canEdit ? (
                   <>
+                    <Link
+                      href={`/tools/${t.id}/edit?mode=view&returnTo=${encodeURIComponent(returnTo)}`}
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                    >
+                      View
+                    </Link>
                     <Link
                       href={`/tools/${t.id}/edit?returnTo=${encodeURIComponent(returnTo)}`}
                       className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"

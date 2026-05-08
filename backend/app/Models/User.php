@@ -112,4 +112,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(Tool::class, 'created_by');
     }
+
+    public function toolComments(): HasMany
+    {
+        return $this->hasMany(ToolComment::class);
+    }
+
+    public function toolRatings(): HasMany
+    {
+        return $this->hasMany(ToolRating::class);
+    }
 }

@@ -5,9 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   clearStoredAuth,
+  getToken,
   getStoredUser,
   type AuthUser,
 } from "@/lib/auth-storage";
+import { API_BASE } from "@/lib/api";
 import { navItemsForRole } from "@/lib/nav-config";
 
 function MenuIcon({ open }: { open: boolean }) {
@@ -49,6 +51,7 @@ export function Navbar() {
   const mobileNavId = useId();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pendingAdminToolsCount, setPendingAdminToolsCount] = useState(0);
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
 
   function closeAccountMenu() {
@@ -64,6 +67,92 @@ export function Navbar() {
   useEffect(() => {
     setUser(getStoredUser());
   }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: number | null = null;
+    const isAdminReviewer = user?.role === "owner" || user?.role === "pm";
+
+    async function loadPendingCount() {
+      if (!isAdminReviewer) {
+        setPendingAdminToolsCount(0);
+        return;
+      }
+      const token = getToken();
+      if (!token) {
+        setPendingAdminToolsCount(0);
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({
+          approval_status: "pending",
+          per_page: "1",
+          page: "1",
+        });
+        const res = await fetch(`${API_BASE}/api/admin/tools?${params.toString()}`, {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const raw = (await res.json().catch(() => null)) as {
+          pagination?: { total?: number };
+          data?: unknown[];
+          tools?: unknown[];
+        } | null;
+        if (!cancelled) {
+          const total =
+            typeof raw?.pagination?.total === "number"
+              ? raw.pagination.total
+              : Array.isArray(raw?.tools)
+                ? raw.tools.length
+                : Array.isArray(raw?.data)
+                  ? raw.data.length
+                  : 0;
+          setPendingAdminToolsCount(total);
+        }
+      } catch {
+        if (!cancelled) {
+          setPendingAdminToolsCount(0);
+        }
+      }
+    }
+
+    function handleWindowFocus() {
+      void loadPendingCount();
+    }
+
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        void loadPendingCount();
+      }
+    }
+
+    function handlePendingChanged() {
+      void loadPendingCount();
+    }
+
+    void loadPendingCount();
+    if (isAdminReviewer) {
+      intervalId = window.setInterval(() => {
+        void loadPendingCount();
+      }, 10000);
+      window.addEventListener("focus", handleWindowFocus);
+      document.addEventListener("visibilitychange", handleVisibility);
+      window.addEventListener("admin-pending-tools-changed", handlePendingChanged);
+    }
+
+    return () => {
+      cancelled = true;
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("admin-pending-tools-changed", handlePendingChanged);
+    };
+  }, [pathname, user]);
 
   useEffect(() => {
     function onResize() {
@@ -103,11 +192,17 @@ export function Navbar() {
             >
               {navLinks.map((item) => {
                 const active = matchesPath(pathname, item.href);
+                const showPendingBadge =
+                  item.href === "/admin/tools" && pendingAdminToolsCount > 0;
+                const badgeLabel =
+                  pendingAdminToolsCount > 99
+                    ? "99+"
+                    : String(pendingAdminToolsCount);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`rounded-lg px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${
+                    className={`relative rounded-lg px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${
                       active
                         ? "bg-sky-50 text-sky-800"
                         : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
@@ -115,6 +210,14 @@ export function Navbar() {
                     aria-current={active ? "page" : undefined}
                   >
                     {item.label}
+                    {showPendingBadge ? (
+                      <span
+                        className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white"
+                        aria-label={`${pendingAdminToolsCount} pending admin tools`}
+                      >
+                        {badgeLabel}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -205,17 +308,31 @@ export function Navbar() {
           <nav className="flex flex-col gap-1" aria-label="Mobile navigation">
             {navLinks.map((item) => {
               const active = matchesPath(pathname, item.href);
+              const showPendingBadge =
+                item.href === "/admin/tools" && pendingAdminToolsCount > 0;
+              const badgeLabel =
+                pendingAdminToolsCount > 99
+                  ? "99+"
+                  : String(pendingAdminToolsCount);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-lg px-3 py-3 text-base font-medium ${
+                  className={`relative rounded-lg px-3 py-3 text-base font-medium ${
                     active ? "bg-sky-50 text-sky-900" : "text-slate-800"
                   }`}
                   aria-current={active ? "page" : undefined}
                   onClick={() => setMenuOpen(false)}
                 >
                   {item.label}
+                  {showPendingBadge ? (
+                    <span
+                      className="absolute right-1.5 top-1.5 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white"
+                      aria-label={`${pendingAdminToolsCount} pending admin tools`}
+                    >
+                      {badgeLabel}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

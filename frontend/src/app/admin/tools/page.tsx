@@ -283,6 +283,7 @@ export default function AdminToolsPage() {
       }
       showToast("Tool approved.", "success");
       await fetchTools(toolsPagination.current_page);
+      window.dispatchEvent(new CustomEvent("admin-pending-tools-changed"));
     } catch {
       showToast("Network error.", "error");
     } finally {
@@ -311,6 +312,7 @@ export default function AdminToolsPage() {
       }
       showToast("Tool rejected.", "success");
       await fetchTools(toolsPagination.current_page);
+      window.dispatchEvent(new CustomEvent("admin-pending-tools-changed"));
     } catch {
       showToast("Network error.", "error");
     } finally {
