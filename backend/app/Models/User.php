@@ -103,13 +103,6 @@ class User extends Authenticatable
         return $this->availableTwoFactorMethods() !== [];
     }
 
-    public function hasAnotherTwoFactorMethodBesides(string $method): bool
-    {
-        $active = array_column($this->availableTwoFactorMethods(), 'id');
-
-        return count(array_diff($active, [$method])) > 0;
-    }
-
     public function tools(): HasMany
     {
         return $this->hasMany(Tool::class, 'created_by');

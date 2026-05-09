@@ -20,12 +20,13 @@ class SecuritySettingsController extends Controller
             'email' => [
                 'enabled' => (bool) $user->two_factor_email_enabled,
                 'address' => $user->email,
-                'can_disable' => $user->hasAnotherTwoFactorMethodBesides('email'),
+                // Allow turning off even when it is the only method (sign-in then uses password only).
+                'can_disable' => true,
             ],
             'totp' => [
                 'enabled' => $user->two_factor_totp_enabled_at !== null,
                 'enabled_at' => $user->two_factor_totp_enabled_at?->toIso8601String(),
-                'can_disable' => $user->hasAnotherTwoFactorMethodBesides('totp'),
+                'can_disable' => true,
             ],
             'available_login_methods' => $user->availableTwoFactorMethods(),
         ]);

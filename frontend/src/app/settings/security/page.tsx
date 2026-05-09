@@ -169,7 +169,7 @@ export default function SecuritySettingsPage() {
     <div className="space-y-8">
       <PageHeader
         title="Security settings"
-        description="Manage email codes and Google Authenticator (TOTP) for sign-in. You must keep at least one method enabled."
+        description="Manage email codes and Google Authenticator (TOTP) for sign-in. You can turn methods off; if none are enabled, you sign in with password only."
       />
 
       {loading ? <p className="text-slate-600">Loading settings…</p> : null}
@@ -188,15 +188,10 @@ export default function SecuritySettingsPage() {
                 {state.email.enabled ? "Enabled" : "Disabled"}
               </span>
             </p>
-            {state.email.enabled && !state.email.can_disable ? (
-              <p className="text-xs text-slate-500">
-                Enable Google Authenticator before you can turn off email 2FA.
-              </p>
-            ) : null}
             <Button
               type="button"
               variant={state.email.enabled ? "secondary" : "primary"}
-              disabled={busy || (state.email.enabled && !state.email.can_disable)}
+              disabled={busy}
               onClick={() => void toggleEmail(!state.email.enabled)}
             >
               {state.email.enabled ? "Disable Email 2FA" : "Enable Email 2FA"}
@@ -216,13 +211,10 @@ export default function SecuritySettingsPage() {
             </p>
             {state.totp.enabled ? (
               <>
-                {!state.totp.can_disable ? (
-                  <p className="text-xs text-slate-500">Enable email 2FA before disabling the authenticator app.</p>
-                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={busy || !state.totp.can_disable}
+                  disabled={busy}
                   onClick={() => void disableTotp()}
                 >
                   Disable
